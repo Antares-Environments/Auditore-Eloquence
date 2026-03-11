@@ -24,6 +24,12 @@ app, rt = fast_app(
 def serve_static(file_path: str):
     return FileResponse(f"static/{file_path}")
 
+# --- THE FAVICON ROUTE ---
+@rt("static/favicon.ico")
+def serve_favicon():
+    
+    return FileResponse("assets/favicon.ico")
+
 setup_websockets(app)
 
 @rt("/")

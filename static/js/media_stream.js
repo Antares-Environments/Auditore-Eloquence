@@ -162,9 +162,12 @@ document.addEventListener("DOMContentLoaded", () => {
         logEvent("Secure socket established with backend engine.");
         
         try {
-          // Dynamic Audio Codec Fallback
+          // 1. Isolate the audio track from the mixed media stream
+          const audioOnlyStream = new MediaStream(activeStream.getAudioTracks());
+
+          // 2. Dynamic Audio Codec Fallback
           let selectedMimeType = '';
-          const supportedTypes = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+          const supportedTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
           for (const type of supportedTypes) {
             if (MediaRecorder.isTypeSupported(type)) {
               selectedMimeType = type;
@@ -175,13 +178,16 @@ document.addEventListener("DOMContentLoaded", () => {
           const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
           logEvent(`Audio engine locked: ${selectedMimeType || 'System Default'}`);
           
-          mediaRecorder = new MediaRecorder(activeStream, options);
+          // 3. Feed ONLY the isolated audio stream into the recorder
+          mediaRecorder = new MediaRecorder(audioOnlyStream, options);
+          
           mediaRecorder.ondataavailable = async (event) => {
             if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
               const buffer = await event.data.arrayBuffer();
               socket.send(buffer);
             }
           };
+          
           mediaRecorder.start(250);
           if (speechEngine) speechEngine.start();
 
