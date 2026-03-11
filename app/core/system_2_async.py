@@ -2,12 +2,14 @@ import json
 import asyncio
 from google import genai
 from google.genai import types
+from app.core.validators import ExpectedOutput
 
 class BackgroundCouncil:
     def __init__(self, council_config):
         self.council_config = council_config
         self.client = genai.Client()
-        self.model = "gemini-2.5-flash-native-audio-latest"
+        # Standard flash is optimal for pure text evaluation
+        self.model = "gemini-2.5-flash"
 
     def _build_instruction(self, member):
         base = f"Role: {member.specialist_role}\nObjective: {member.primary_objective}\n"
@@ -28,7 +30,8 @@ class BackgroundCouncil:
         
         for result in completed_tasks:
             if isinstance(result, Exception):
-                results.append({"indicator": "green", "message": "error"})
+                # Realigned strictly to your color logic: Pink signifies failure/denial
+                results.append({"indicator": "pink", "interruption": False, "message": "COUNCIL ERROR"})
             else:
                 results.append(result)
                 
@@ -41,7 +44,8 @@ class BackgroundCouncil:
             config=types.GenerateContentConfig(
                 system_instruction=instruction,
                 temperature=0.2,
-                response_mime_type="application/json"
+                response_mime_type="application/json",
+                response_schema=ExpectedOutput, # Locks the model output to your exact requirements
             )
         )
         return json.loads(response.text)
