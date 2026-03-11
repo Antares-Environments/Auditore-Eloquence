@@ -1,0 +1,15 @@
+name: Mirror
+on:
+  push:
+    branches:
+      - main
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: curl --silent --request POST --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" --data "name=${{ github.event.repository.name }}" "https://gitlab.com/api/v4/projects"
+      - run: git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.com/antares-agentic-environments/${{ github.event.repository.name }}.git
+      - run: git push gitlab --mirror

@@ -1,0 +1,90 @@
+:root {
+    --bg-color: #ffffff;
+    --text-color: #333333;
+    --indicator-green: #2ecc71;
+    --indicator-yellow: #f1c40f;
+    --indicator-pink: #ff69b4;
+    --indicator-white: #f8f9fa;
+    --indicator-gray: #95a5a6;
+  }
+  
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  
+  h1 {
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  
+  #status-indicator {
+    width: 100%;
+    max-width: 600px;
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    transition: background-color 0.1s ease-in-out;
+    border: 1px solid var(--indicator-gray);
+  }
+  
+  .green {
+    background-color: var(--indicator-green);
+    color: var(--bg-color);
+  }
+  
+  .yellow {
+    background-color: var(--indicator-yellow);
+    color: var(--text-color);
+  }
+  
+  .pink {
+    background-color: var(--indicator-pink);
+    color: var(--bg-color);
+  }
+  
+  .white {
+    background-color: var(--indicator-white);
+    color: var(--text-color);
+  }
+  
+  .gray {
+    background-color: var(--indicator-gray);
+    color: var(--bg-color);
+  }
+  
+  button {
+    background-color: var(--indicator-gray);
+    color: var(--bg-color);
+    border: none;
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: opacity 0.2s;
+  }
+  
+  button:hover {
+    opacity: 0.8;
+  }
+  
+  #video-feed {
+    width: 100%;
+    max-width: 600px;
+    margin-top: 2rem;
+    border-radius: 4px;
+    border: 2px solid var(--indicator-gray);
+    background-color: var(--indicator-white);
+  }

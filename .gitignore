@@ -1,0 +1,15 @@
+.cursor/
+.vscode/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+.env
+.venv
+env/
+venv/
+.gcloudignore
+# Logs and Caches
+*.log
+.pytest_cache

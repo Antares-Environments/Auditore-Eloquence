@@ -1,0 +1,5 @@
+python-fasthtml
+pydantic
+google-genai
+websockets
+uvicorn

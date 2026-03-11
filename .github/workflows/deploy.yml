@@ -1,0 +1,21 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/auditore-eloquence
+      - run: |
+          gcloud run deploy auditore-eloquence-service \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/auditore-eloquence \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --execution-environment gen2
