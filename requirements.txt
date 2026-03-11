@@ -1,5 +1,5 @@
-python-fasthtml
-pydantic
-google-genai
-websockets
-uvicorn
+python-fasthtml==0.12.48
+google-genai==1.66.0
+uvicorn==0.41.0
+websockets==16.0
+pydantic==2.12.5
