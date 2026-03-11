@@ -70,5 +70,6 @@ def load_templates():
                 raw_data = json.load(f)
             validated_template = AuditoreTemplate(**raw_data)
             ACTIVE_TEMPLATES[validated_template.template_metadata.name] = validated_template
-        except Exception:
-            pass
+        except Exception as e:
+            # DIAGNOSTIC EXPOSURE
+            print(f"\n[VALIDATOR ERROR] Failed to load template '{file_path.name}': {e}\n")

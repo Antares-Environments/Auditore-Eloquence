@@ -1,15 +1,19 @@
 import json
+import time
 from fasthtml.common import fast_app, serve, Link, Script, Div, Button, Video, Titled, FileResponse
 from app.api.websockets import setup_websockets
 from app.core.validators import load_templates, ACTIVE_TEMPLATES
 
 load_templates()
 
+# Generates a unique numeric timestamp every time the server starts or reloads
+CACHE_BUSTER = int(time.time())
+
 app, rt = fast_app(
     pico=False,
     hdrs=(
-        Link(rel="stylesheet", href="/static/css/style.css?v=5"),
-        Script(src="/static/js/media_stream.js?v=5", defer=True)
+        Link(rel="stylesheet", href=f"/static/css/style.css?v={CACHE_BUSTER}"),
+        Script(src=f"/static/js/media_stream.js?v={CACHE_BUSTER}", defer=True)
     )
 )
 
@@ -38,7 +42,7 @@ def get():
             data_templates=json.dumps(template_data)
         ),
         
-        # The hidden content block that mirrors your portfolio logic
+        # The hidden content block
         Div(id="template-details", cls="white", style="display: none; padding: 1rem; margin-bottom: 1rem; width: 100%; max-width: 600px; box-sizing: border-box; text-align: center; border-radius: 4px; font-weight: bold; border: 1px solid var(--indicator-gray);"),
         
         Div(

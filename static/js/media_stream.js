@@ -12,7 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeStream;
   let selectedTemplate = "";
   let templateData = {};
-  let speechEngine; // Added for the Background Council
+  let speechEngine; 
 
   const rawTemplates = donutContainer.getAttribute("data-templates");
   
@@ -111,12 +111,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       videoFeed.srcObject = activeStream;
+      
+      // IGNITION: Force the video feed to render immediately
+      videoFeed.play();
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/stream?template=${encodeURIComponent(selectedTemplate)}`;
       socket = new WebSocket(wsUrl);
 
-      // Initialize Native Speech Recognition
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         speechEngine = new SpeechRecognition();
@@ -155,13 +157,11 @@ document.addEventListener("DOMContentLoaded", () => {
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         
-        // System 1 Live Audio Response
         if (data.indicator && !data.async_results) {
           statusIndicator.className = data.indicator;
           statusIndicator.textContent = data.message;
         }
         
-        // System 2 Async Council & Pacing Response
         if (data.async_results && data.async_results.pacing) {
           if (data.async_results.pacing.indicator !== "green") {
             statusIndicator.className = data.async_results.pacing.indicator;
@@ -178,8 +178,10 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
     } catch (error) {
+      // DIAGNOSTIC EXPOSURE
+      console.error("[FRONTEND ENGINE ERROR]:", error);
       statusIndicator.className = "pink";
-      statusIndicator.textContent = "MEDIA ACCESS DENIED";
+      statusIndicator.textContent = "SYSTEM FAULT (SEE CONSOLE)";
     }
   });
 

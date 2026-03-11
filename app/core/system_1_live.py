@@ -51,5 +51,7 @@ class LiveSessionManager:
                 )
             )
             return json.loads(response.text)
-        except Exception:
+        except Exception as e:
+            # DIAGNOSTIC EXPOSURE
+            print(f"\n[SYSTEM 1 AUDIO ERROR] Gemini API rejected the payload: {e}\n")
             return {"indicator": "yellow", "interruption": False, "message": "SYSTEM REALIGNING"}

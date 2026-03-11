@@ -8,7 +8,6 @@ class BackgroundCouncil:
     def __init__(self, council_config):
         self.council_config = council_config
         self.client = genai.Client()
-        # Standard flash is optimal for pure text evaluation
         self.model = "gemini-2.5-flash"
 
     def _build_instruction(self, member):
@@ -30,7 +29,8 @@ class BackgroundCouncil:
         
         for result in completed_tasks:
             if isinstance(result, Exception):
-                # Realigned strictly to your color logic: Pink signifies failure/denial
+                # DIAGNOSTIC EXPOSURE
+                print(f"\n[SYSTEM 2 COUNCIL ERROR] Background evaluation failed: {result}\n")
                 results.append({"indicator": "pink", "interruption": False, "message": "COUNCIL ERROR"})
             else:
                 results.append(result)
@@ -45,7 +45,7 @@ class BackgroundCouncil:
                 system_instruction=instruction,
                 temperature=0.2,
                 response_mime_type="application/json",
-                response_schema=ExpectedOutput, # Locks the model output to your exact requirements
+                response_schema=ExpectedOutput,
             )
         )
         return json.loads(response.text)
