@@ -1,11 +1,15 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const startButton = document.getElementById("start-session");
-  const endButton = document.getElementById("end-session");
+  const sessionToggle = document.getElementById("session-toggle");
   const statusIndicator = document.getElementById("status-indicator");
   const videoFeed = document.getElementById("video-feed");
   const donutContainer = document.getElementById("donut-container");
   const centerText = document.getElementById("donut-center-text");
   const templateDetails = document.getElementById("template-details");
+  
+  // Panel management
+  const idlePanel = document.getElementById("idle-panel");
+  const activeSessionPanel = document.getElementById("active-session-panel");
+  const eventLog = document.getElementById("live-event-log");
 
   let socket;
   let mediaRecorder;
@@ -13,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedTemplate = "";
   let templateData = {};
   let speechEngine; 
+  let isSessionActive = false;
 
   const rawTemplates = donutContainer.getAttribute("data-templates");
   
@@ -102,17 +107,31 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  startButton.addEventListener("click", async () => {
+  function logEvent(message) {
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement("div");
+    entry.textContent = `[${time}] ${message}`;
+    eventLog.appendChild(entry);
+    eventLog.scrollTop = eventLog.scrollHeight; 
+  }
+
+  async function startSession() {
     try {
       if (!selectedTemplate) {
         statusIndicator.className = "yellow";
         statusIndicator.textContent = "SELECT TEMPLATE FIRST";
         return;
       }
+
+      isSessionActive = true;
+      sessionToggle.textContent = "TERMINATE SESSION";
+      idlePanel.style.display = "none";
+      activeSessionPanel.style.display = "flex";
+      eventLog.innerHTML = ""; 
+      logEvent(`Initializing protocol: ${selectedTemplate}...`);
+
       activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       videoFeed.srcObject = activeStream;
-      
-      // IGNITION: Force the video feed to render immediately
       videoFeed.play();
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -133,37 +152,66 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
           if (finalTranscript.trim().length > 0 && socket.readyState === WebSocket.OPEN) {
+            logEvent(`Microphone caught: "${finalTranscript.trim()}"`);
             socket.send(JSON.stringify({ text: finalTranscript }));
           }
         };
       }
 
       socket.onopen = () => {
-        mediaRecorder = new MediaRecorder(activeStream, { mimeType: "audio/webm" });
-        mediaRecorder.ondataavailable = async (event) => {
-          if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-            const buffer = await event.data.arrayBuffer();
-            socket.send(buffer);
+        logEvent("Secure socket established with backend engine.");
+        
+        try {
+          // Dynamic Audio Codec Fallback
+          let selectedMimeType = '';
+          const supportedTypes = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+          for (const type of supportedTypes) {
+            if (MediaRecorder.isTypeSupported(type)) {
+              selectedMimeType = type;
+              break;
+            }
           }
-        };
-        mediaRecorder.start(250);
-        if (speechEngine) speechEngine.start();
+          
+          const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
+          logEvent(`Audio engine locked: ${selectedMimeType || 'System Default'}`);
+          
+          mediaRecorder = new MediaRecorder(activeStream, options);
+          mediaRecorder.ondataavailable = async (event) => {
+            if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+              const buffer = await event.data.arrayBuffer();
+              socket.send(buffer);
+            }
+          };
+          mediaRecorder.start(250);
+          if (speechEngine) speechEngine.start();
 
-        startButton.disabled = true;
-        statusIndicator.className = "green";
-        statusIndicator.textContent = `ACTIVE: ${selectedTemplate}`;
+          statusIndicator.className = "green";
+          statusIndicator.textContent = `ACTIVE: ${selectedTemplate}`;
+        } catch (mediaError) {
+          console.error("Audio Encoding Error:", mediaError);
+          logEvent(`[ERROR] Audio engine failed to start: ${mediaError.message}`);
+          statusIndicator.className = "pink";
+          statusIndicator.textContent = "AUDIO CODEC REJECTED";
+        }
       };
 
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         
+        if (data.system_event) {
+          logEvent(`[SYSTEM] ${data.system_event}`);
+          return;
+        }
+
         if (data.indicator && !data.async_results) {
+          logEvent(`[EVALUATION] ${data.message}`);
           statusIndicator.className = data.indicator;
           statusIndicator.textContent = data.message;
         }
         
         if (data.async_results && data.async_results.pacing) {
           if (data.async_results.pacing.indicator !== "green") {
+            logEvent(`[WARNING] Pacing anomaly detected: ${data.async_results.pacing.message}`);
             statusIndicator.className = data.async_results.pacing.indicator;
             statusIndicator.textContent = data.async_results.pacing.message;
           }
@@ -171,21 +219,27 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       socket.onclose = () => {
-        statusIndicator.className = "white";
-        statusIndicator.textContent = "SESSION TERMINATED";
-        startButton.disabled = false;
-        if (speechEngine) speechEngine.stop();
+        logEvent("Socket disconnected.");
+        terminateSessionUI();
       };
 
     } catch (error) {
-      // DIAGNOSTIC EXPOSURE
       console.error("[FRONTEND ENGINE ERROR]:", error);
       statusIndicator.className = "pink";
       statusIndicator.textContent = "SYSTEM FAULT (SEE CONSOLE)";
+      logEvent("CRITICAL ERROR: Media access denied or system crash.");
+      terminateSessionUI();
     }
-  });
+  }
 
-  endButton.addEventListener("click", () => {
+  function terminateSessionUI() {
+    isSessionActive = false;
+    sessionToggle.textContent = "START SESSION";
+    statusIndicator.className = "white";
+    statusIndicator.textContent = "SYSTEM IDLE";
+    idlePanel.style.display = "flex";
+    activeSessionPanel.style.display = "none";
+
     if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
     if (speechEngine) speechEngine.stop();
     if (socket && socket.readyState === WebSocket.OPEN) socket.close();
@@ -193,8 +247,14 @@ document.addEventListener("DOMContentLoaded", () => {
       activeStream.getTracks().forEach(track => track.stop());
       videoFeed.srcObject = null;
     }
-    startButton.disabled = false;
-    statusIndicator.className = "white";
-    statusIndicator.textContent = "SYSTEM IDLE";
+  }
+
+  sessionToggle.addEventListener("click", () => {
+    if (isSessionActive) {
+      logEvent("Manual termination initiated...");
+      terminateSessionUI();
+    } else {
+      startSession();
+    }
   });
 });
