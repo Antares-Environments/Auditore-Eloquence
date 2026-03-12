@@ -1,70 +1,70 @@
 {
-    "template_metadata": {
-      "name": "Formal Debate",
-      "version": "1.0",
-      "author": "Antares Agentic Environments",
-      "description": "Enforces strict factual rigidity and structural logic, prioritizing premise evaluation over vocal tone."
+  "template_metadata": {
+    "name": "Formal Debate",
+    "version": "1.0",
+    "author": "Antares Agentic Environments",
+    "description": "Enforces strict factual rigidity and structural logic, prioritizing premise evaluation over vocal tone."
+  },
+  "system_1_live_socket": {
+    "specialist_role": "Semantic & Logic Specialist",
+    "primary_objective": "Monitor the audio transcript continuously for logical fallacies. Ignore vocal tone. Interrupt immediately if a structural flaw is detected.",
+    "model_parameters": {
+      "temperature": 0.1,
+      "interruption_priority": "high"
     },
-    "system_1_live_socket": {
-      "specialist_role": "Semantic & Logic Specialist",
-      "primary_objective": "Monitor the audio transcript continuously for logical fallacies. Ignore vocal tone. Interrupt immediately if a structural flaw is detected.",
-      "model_parameters": {
-        "temperature": 0.1,
-        "interruption_priority": "high"
-      },
-      "few_shot_calibration": [
-        {
-          "user_input": "His data is wrong because he is just a student.",
-          "expected_output": {
-            "flaw": "Ad Hominem",
-            "status": "Invalid",
-            "indicator": "pink",
-            "interruption": true,
-            "message": "Address the premise, not the character."
-          }
-        },
-        {
-          "user_input": "Therefore, the network latency will increase linearly.",
-          "expected_output": {
-            "flaw": null,
-            "status": "Valid Premise",
-            "indicator": "green",
-            "interruption": false,
-            "message": "Logical progression."
-          }
-        }
-      ],
-      "rag_dictionary_injected": [
-        {
-          "rule": "Strawman Fallacy",
-          "definition": "Refuting an argument the opponent did not make.",
-          "ui_trigger": "pink"
-        },
-        {
-          "rule": "Ad Hominem",
-          "definition": "Attacking the character of the opponent instead of their logical premise.",
-          "ui_trigger": "pink"
-        }
-      ]
-    },
-    "system_2_async_council": [
+    "few_shot_calibration": [
       {
-        "specialist_role": "Narrative Specialist",
-        "primary_objective": "Evaluate the finalized transcript chunk to determine if the speaker successfully tied their immediate argument back to the core thesis.",
-        "rag_dictionary_injected": [
-          {
-            "rule": "Thematic Coherence",
-            "definition": "The current point must logically support the overarching thesis declared at the start of the session.",
-            "ui_trigger": "white"
-          }
-        ]
+        "user_input": "His data is wrong because he is just a student.",
+        "expected_output": {
+          "flaw": "Ad Hominem",
+          "status": "Invalid",
+          "indicator": "red",
+          "interruption": true,
+          "message": "Address the premise, not the character."
+        }
+      },
+      {
+        "user_input": "Therefore, the network latency will increase linearly.",
+        "expected_output": {
+          "flaw": null,
+          "status": "Valid Premise",
+          "indicator": "green",
+          "interruption": false,
+          "message": "Logical progression."
+        }
       }
     ],
-    "python_orchestrator_thresholds": {
-      "track_wpm": true,
-      "wpm_upper_limit": 160,
-      "wpm_lower_limit": 110,
-      "wpm_violation_trigger": "yellow",
-      "enforce_time_limit_seconds": 300
+    "rag_dictionary_injected": [
+      {
+        "rule": "Strawman Fallacy",
+        "definition": "Refuting an argument the opponent did not make.",
+        "ui_trigger": "red"
+      },
+      {
+        "rule": "Ad Hominem",
+        "definition": "Attacking the character of the opponent instead of their logical premise.",
+        "ui_trigger": "red"
+      }
+    ]
+  },
+  "system_2_async_council": [
+    {
+      "specialist_role": "Narrative Specialist",
+      "primary_objective": "Evaluate the finalized transcript chunk to determine if the speaker successfully tied their immediate argument back to the core thesis.",
+      "rag_dictionary_injected": [
+        {
+          "rule": "Thematic Coherence",
+          "definition": "The current point must logically support the overarching thesis declared at the start of the session.",
+          "ui_trigger": "green"
+        }
+      ]
     }
+  ],
+  "python_orchestrator_thresholds": {
+    "track_wpm": true,
+    "wpm_upper_limit": 160,
+    "wpm_lower_limit": 110,
+    "wpm_violation_trigger": "orange",
+    "enforce_time_limit_seconds": 300
   }
+}

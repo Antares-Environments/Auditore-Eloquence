@@ -6,6 +6,8 @@
   --indicator-pink: #ff69b4;
   --indicator-white: #d3ecb4;
   --indicator-gray: #a2a695;
+  --indicator-red: #e74c3c;
+  --indicator-orange: #e67e22;
   --element-jade: #39e20b;
   --element-olive: #658902;
   --element-brown: #3f2a03;
@@ -32,7 +34,7 @@ body {
 }
 
 ::selection {
-  background-color: var(--indicator-yellow);
+  background-color: var(--indicator-orange);
   color: var(--element-brown);
 }
 
@@ -85,6 +87,16 @@ h1 {
 
 .gray {
   background-color: var(--indicator-gray);
+  color: var(--bg-color);
+}
+
+.red {
+  background-color: var(--indicator-red);
+  color: var(--bg-color);
+}
+
+.orange {
+  background-color: var(--indicator-orange);
   color: var(--bg-color);
 }
 
@@ -162,7 +174,7 @@ option {
 }
 
 option:checked, option:hover {
-  background-color: var(--indicator-yellow);
+  background-color: var(--indicator-orange);
   color: var(--element-brown);
 }
 
@@ -201,7 +213,7 @@ option:checked, option:hover {
 }
 
 .donut-slice.selected {
-  stroke: var(--indicator-yellow);
+  stroke: var(--indicator-orange);
   stroke-width: 58px !important;
 }
 

@@ -20,13 +20,19 @@ async def stream_handler(ws):
             await ws.send_json(data)
         except Exception as e:
             print(f"[SEND JSON ERROR] {e}", flush=True)
+            
+    async def send_audio(audio_bytes: bytes):
+        try:
+            await ws.send_bytes(audio_bytes)
+        except Exception as e:
+            print(f"[SEND AUDIO ERROR] {e}", flush=True)
 
     await emit_event(f"Mounting orchestrator for {template_name}...")
     
     try:
         orchestrator = SessionOrchestrator(template_name)
         await emit_event("System 1 (Live Audio) and System 2 (Council) initialized.")
-        await orchestrator.start_live_stream(emit_event, send_json)
+        await orchestrator.start_live_stream(emit_event, send_json, send_audio)
     except Exception as e:
         print(f"FAILED TO LOAD ORCHESTRATOR: {e}", flush=True)
         await emit_event(f"CRITICAL ERROR: Failed to load orchestrator template. {e}")

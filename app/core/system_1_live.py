@@ -21,8 +21,12 @@ class LiveSessionManager:
             base += f"User Input: \"{shot.user_input}\"\n"
             base += f"Expected Output: {shot.expected_output.model_dump_json()}\n\n"
             
-        base += "\nCRITICAL INSTRUCTION: You are listening to a live audio stream. You must constantly evaluate the speaker's tone, pacing, and delivery. "
-        base += "You must output your evaluation ONLY as a raw JSON object matching the format above. Do not include markdown tags.\n"
+        base += "\nCRITICAL INSTRUCTION: You are listening to a live audio stream. You must constantly evaluate the speaker's tone, pacing, and delivery.\n"
+        base += "You must map your findings to the following priority logic:\n"
+        base += "RED: High Priority correction. You MUST verbally speak the correction to the user AND output the JSON payload.\n"
+        base += "ORANGE: Low Priority correction. You MUST REMAIN COMPLETELY SILENT and output ONLY the JSON payload for the visual panel.\n"
+        base += "GREEN: Good for now. You MUST REMAIN COMPLETELY SILENT and output ONLY the JSON payload for the visual panel.\n"
+        base += "Never use markdown tags in the text output.\n"
             
         return base
 
@@ -30,5 +34,6 @@ class LiveSessionManager:
         config = types.LiveConnectConfig(
             system_instruction=types.Content(parts=[types.Part.from_text(text=self.system_instruction)]),
             temperature=self.config.model_parameters.temperature,
+            response_modalities=["AUDIO"]
         )
         return self.client.aio.live.connect(model=self.model, config=config)

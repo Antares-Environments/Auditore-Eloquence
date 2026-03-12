@@ -6,7 +6,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const centerText = document.getElementById("donut-center-text");
   const templateDetails = document.getElementById("template-details");
   
-  // Panel management
   const idlePanel = document.getElementById("idle-panel");
   const activeSessionPanel = document.getElementById("active-session-panel");
   const eventLog = document.getElementById("live-event-log");
@@ -118,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function startSession() {
     try {
       if (!selectedTemplate) {
-        statusIndicator.className = "yellow";
+        statusIndicator.className = "orange";
         statusIndicator.textContent = "SELECT TEMPLATE FIRST";
         return;
       }
@@ -162,10 +161,8 @@ document.addEventListener("DOMContentLoaded", () => {
         logEvent("Secure socket established with backend engine.");
         
         try {
-          // 1. Isolate the audio track from the mixed media stream
           const audioOnlyStream = new MediaStream(activeStream.getAudioTracks());
 
-          // 2. Dynamic Audio Codec Fallback
           let selectedMimeType = '';
           const supportedTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
           for (const type of supportedTypes) {
@@ -178,7 +175,6 @@ document.addEventListener("DOMContentLoaded", () => {
           const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
           logEvent(`Audio engine locked: ${selectedMimeType || 'System Default'}`);
           
-          // 3. Feed ONLY the isolated audio stream into the recorder
           mediaRecorder = new MediaRecorder(audioOnlyStream, options);
           
           mediaRecorder.ondataavailable = async (event) => {
@@ -196,12 +192,20 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (mediaError) {
           console.error("Audio Encoding Error:", mediaError);
           logEvent(`[ERROR] Audio engine failed to start: ${mediaError.message}`);
-          statusIndicator.className = "pink";
+          statusIndicator.className = "red";
           statusIndicator.textContent = "AUDIO CODEC REJECTED";
         }
       };
 
-      socket.onmessage = (event) => {
+      socket.onmessage = async (event) => {
+        if (event.data instanceof Blob) {
+            logEvent("[AUDIO FRAME RECEIVED] Intercepted binary speech. Playing audio...");
+            const url = URL.createObjectURL(event.data);
+            const audio = new Audio(url);
+            audio.play();
+            return;
+        }
+
         const data = JSON.parse(event.data);
         
         if (data.system_event) {
@@ -231,7 +235,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     } catch (error) {
       console.error("[FRONTEND ENGINE ERROR]:", error);
-      statusIndicator.className = "pink";
+      statusIndicator.className = "red";
       statusIndicator.textContent = "SYSTEM FAULT (SEE CONSOLE)";
       logEvent("CRITICAL ERROR: Media access denied or system crash.");
       terminateSessionUI();

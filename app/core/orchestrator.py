@@ -29,10 +29,10 @@ class SessionOrchestrator:
         self.last_council_time = 0.0
         self.COUNCIL_COOLDOWN = 15.0 
 
-    async def start_live_stream(self, emit_event, send_json):
-        self.live_task = asyncio.create_task(self._run_live_loop(emit_event, send_json))
+    async def start_live_stream(self, emit_event, send_json, send_audio):
+        self.live_task = asyncio.create_task(self._run_live_loop(emit_event, send_json, send_audio))
 
-    async def _run_live_loop(self, emit_event, send_json):
+    async def _run_live_loop(self, emit_event, send_json, send_audio):
         try:
             await emit_event("Opening continuous WebSocket to Gemini Multimodal Live API...")
             async with self.live_manager.get_session() as session:
@@ -50,6 +50,9 @@ class SessionOrchestrator:
                     async for response in session.receive():
                         if response.server_content and response.server_content.model_turn:
                             for part in response.server_content.model_turn.parts:
+                                if part.inline_data:
+                                    await send_audio(part.inline_data.data)
+                                    
                                 if part.text:
                                     buffer += part.text
                                     clean_text = buffer.strip()
