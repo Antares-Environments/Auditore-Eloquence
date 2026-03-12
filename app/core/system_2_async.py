@@ -19,33 +19,29 @@ class BackgroundCouncil:
 
     async def evaluate_transcript(self, transcript: str):
         results = []
-        tasks = []
-        
         for member in self.council_config:
             instruction = self._build_instruction(member)
-            tasks.append(self._call_model(instruction, transcript))
-            
-        completed_tasks = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in completed_tasks:
-            if isinstance(result, Exception):
-                # DIAGNOSTIC EXPOSURE
-                print(f"\n[SYSTEM 2 COUNCIL ERROR] Background evaluation failed: {result}\n")
-                results.append({"indicator": "pink", "interruption": False, "message": "COUNCIL ERROR"})
-            else:
-                results.append(result)
-                
+            result = await self._call_model(instruction, transcript)
+            results.append(result)
+            await asyncio.sleep(1)
         return results
 
     async def _call_model(self, instruction: str, transcript: str):
-        response = await self.client.aio.models.generate_content(
-            model=self.model,
-            contents=transcript,
-            config=types.GenerateContentConfig(
-                system_instruction=instruction,
-                temperature=0.2,
-                response_mime_type="application/json",
-                response_schema=ExpectedOutput,
-            )
-        )
-        return json.loads(response.text)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=transcript,
+                    config=types.GenerateContentConfig(
+                        system_instruction=instruction,
+                        temperature=0.2,
+                        response_mime_type="application/json",
+                        response_schema=ExpectedOutput,
+                    )
+                )
+                return json.loads(response.text)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+                await asyncio.sleep(2 ** attempt)

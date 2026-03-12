@@ -24,11 +24,9 @@ app, rt = fast_app(
 def serve_static(file_path: str):
     return FileResponse(f"static/{file_path}")
 
-# --- THE FAVICON ROUTE ---
-@rt("static/favicon.ico")
+@rt("/favicon.ico")
 def serve_favicon():
-    
-    return FileResponse("assets/favicon.ico")
+    return FileResponse("static/assets/favicon.ico")
 
 setup_websockets(app)
 
@@ -43,7 +41,6 @@ def get():
         "Auditore Eloquence",
         Div("SYSTEM IDLE", id="status-indicator", cls="white"),
         
-        # --- THE IDLE PANEL ---
         Div(
             Div(
                 Div("SELECT TEMPLATE", id="donut-center-text"),
@@ -55,16 +52,13 @@ def get():
             style="display: flex; flex-direction: column; align-items: center; width: 100%;"
         ),
 
-        # --- THE ACTIVE SESSION PANEL ---
         Div(
             Video(id="video-feed", autoplay=True, muted=True),
-            # The new live telemetry log
             Div(id="live-event-log", style="width: 100%; max-width: 600px; height: 150px; overflow-y: auto; margin-top: 1rem; padding: 1rem; background-color: var(--indicator-white); border: 2px solid var(--indicator-gray); border-radius: 4px; font-family: monospace; font-size: 0.85rem; color: var(--element-brown); box-sizing: border-box; text-align: left;"),
             id="active-session-panel",
             style="display: none; flex-direction: column; align-items: center; width: 100%;"
         ),
         
-        # --- THE DYNAMIC CONTROL ---
         Div(
             Button("START SESSION", id="session-toggle"),
             cls="button-container"
