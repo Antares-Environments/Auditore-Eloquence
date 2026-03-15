@@ -13,3 +13,4 @@ venv/
 # Logs and Caches
 *.log
 .pytest_cache
+.sesskey
