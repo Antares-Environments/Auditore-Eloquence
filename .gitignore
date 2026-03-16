@@ -14,3 +14,4 @@ venv/
 *.log
 .pytest_cache
 .sesskey
+session_transcript.txt
