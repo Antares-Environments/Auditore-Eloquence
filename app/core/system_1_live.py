@@ -24,7 +24,7 @@ class LiveSessionManager:
         base += "3. For GREEN, YELLOW, or ORANGE observations: REMAIN COMPLETELY SILENT. Do not speak. Do not respond.\n"
         base += "4. Only speak when you MUST correct a RED priority violation.\n"
         base += "5. TRANSCRIPTION RULE: The speaker is speaking ENGLISH. Always transcribe audio input into English text.\n"
-            
+        base += "6. If recieving multiple red errors in a short time, just correct the unique ones and stop. Do not correct repeated errors in the same breath."    
         return base
 
     def get_session(self):
