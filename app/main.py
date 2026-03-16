@@ -15,6 +15,7 @@ CACHE_BUSTER = int(time.time())
 app, rt = fast_app(
     pico=False,
     hdrs=(
+        Link(rel="icon", href=f"/static/assets/favicon.ico?v={CACHE_BUSTER}")
         Link(rel="stylesheet", href=f"/static/css/style.css?v={CACHE_BUSTER}"),
         Script(src=f"/static/js/media_stream.js?v={CACHE_BUSTER}", type="module", defer=True)
     )
