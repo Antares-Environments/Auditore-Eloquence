@@ -1,4 +1,3 @@
-# app/core/orchestrator.py
 import asyncio
 import time
 from typing import Optional, Dict, Any
@@ -62,6 +61,7 @@ class SessionOrchestrator:
                             if media_type == "audio":
                                 await session.send_realtime_input(audio=blob)
                             elif media_type == "video":
+                                # Protocol Correction: Visual frames are images, not video containers
                                 await session.send_realtime_input(video=blob)
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
