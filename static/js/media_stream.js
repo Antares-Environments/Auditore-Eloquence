@@ -81,13 +81,18 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeAudioNodes = [];
 
   window.isCharonSpeaking = false;
-  window.lastAgentSpeechTime = 0; // Timestamp to guard against acoustic feedback overlap
+  window.lastAgentSpeechTime = 0; 
+  window.charonSpeakingTimeout = null; // Debounce timer for network jitter
 
   window.stopAgentAudio = function() {
     activeAudioNodes.forEach(source => {
         try { source.stop(); } catch(e) {}
     });
     activeAudioNodes = [];
+    if (window.charonSpeakingTimeout) {
+        clearTimeout(window.charonSpeakingTimeout);
+        window.charonSpeakingTimeout = null;
+    }
     window.isCharonSpeaking = false;
     window.lastAgentSpeechTime = Date.now(); // Apply cooldown immediately on manual stop or barge-in
     if (playbackContext) {
@@ -159,8 +164,6 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           window.vadInterval = setInterval(() => {
-              // The 150ms Echo Guard: Ignore triggers if the agent is speaking OR just finished speaking.
-              // This stops the acoustic feedback loop from starting a false barge-in.
               if (window.isCharonSpeaking || (Date.now() - window.lastAgentSpeechTime < 150)) return; 
 
               analyser.getByteFrequencyData(dataArray);
@@ -168,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
               for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
               let avg = sum / dataArray.length;
               
-              if (avg > 38) { // Calibrated threshold for user speech
+              if (avg > 38) { 
                   logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
                   if (socket.readyState === WebSocket.OPEN) {
@@ -229,11 +232,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 const idx = activeAudioNodes.indexOf(source);
                 if (idx > -1) activeAudioNodes.splice(idx, 1);
                 if (activeAudioNodes.length === 0) {
-                    window.lastAgentSpeechTime = Date.now(); // Trigger 150ms cool-down
-                    window.isCharonSpeaking = false;
+                    // Debounce the silent gap to account for network jitter
+                    window.charonSpeakingTimeout = setTimeout(() => {
+                        window.lastAgentSpeechTime = Date.now(); 
+                        window.isCharonSpeaking = false;
+                    }, 300);
                 }
             };
             
+            // Cancel debounce if a new audio chunk arrives in time
+            if (window.charonSpeakingTimeout) {
+                clearTimeout(window.charonSpeakingTimeout);
+                window.charonSpeakingTimeout = null;
+            }
+
             activeAudioNodes.push(source);
             window.isCharonSpeaking = true;
 
@@ -254,7 +266,6 @@ document.addEventListener("DOMContentLoaded", () => {
               window.stopAgentAudio();
               return;
           }
-          // Human-readable system status
           if (data.system_event.includes("Mounting")) logEvent("Core Orchestrator Engaged.");
           else if (data.system_event.includes("initialized")) logEvent("Multi-Agent Council synchronized.");
           else logEvent(`System Update: ${data.system_event}`);

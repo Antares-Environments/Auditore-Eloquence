@@ -18,7 +18,8 @@
 }
 
 body {
-  background: radial-gradient(circle at top left, #fffcfd, #f9fdfa);
+  /* Vibrant background to make glass blur visible */
+  background: radial-gradient(circle at top left, #fff9fb, #fffdeb, #fdfdfd); 
   background-attachment: fixed;
   color: var(--text-color);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -39,7 +40,7 @@ body {
 }
 
 ::selection {
-  background-color: var(--indicator-orange);
+  background-color: var(--element-olive);
   color: #ffffff;
 }
 
@@ -61,6 +62,15 @@ h1 {
   text-align: center;
   width: 100%;
   text-shadow: 0 4px 12px rgba(63, 42, 3, 0.1);
+}
+
+#idle-panel {
+  display: flex !important; /* Force centering */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 800px;
 }
 
 #status-indicator {
@@ -174,7 +184,7 @@ option {
   position: relative;
   width: 320px;
   height: 320px;
-  margin: 2rem 0;
+  margin: 2rem auto;
   display: flex;
   align-items: center;
   justify-content: center;

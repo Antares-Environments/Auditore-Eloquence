@@ -43,9 +43,17 @@ class SessionOrchestrator:
                 
                 async def sender():
                     while True:
-                        # Removed redundant heartbeat timeout
-                        item = await self.media_queue.get()
-                        
+                        try:
+                            # Restored heartbeat timeout to keep connection alive during silent periods
+                            item = await asyncio.wait_for(self.media_queue.get(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            # Send an empty audio chunk as a keepalive heartbeat every 2s
+                            try:
+                                await session.send_realtime_input(audio=types.Blob(data=b'\x00'*128, mime_type="audio/pcm;rate=16000"))
+                            except:
+                                pass
+                            continue
+
                         if item is None:
                             break
                         
