@@ -19,6 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let templateData = window.TEMPLATE_DATA || {};
   let isSessionActive = false;
 
+  // Auto-Recorder Variables
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
   // Globally expose hover interaction functions for SVG inline handlers
   window.hoverRingItem = function(selectedId, categoryLabel) {
     const slice = document.getElementById('slice-' + selectedId);
@@ -82,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.isCharonSpeaking = false;
   window.lastAgentSpeechTime = 0; 
-  window.charonSpeakingTimeout = null; // Debounce timer for network jitter
+  window.charonSpeakingTimeout = null; 
 
   window.stopAgentAudio = function() {
     activeAudioNodes.forEach(source => {
@@ -94,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.charonSpeakingTimeout = null;
     }
     window.isCharonSpeaking = false;
-    window.lastAgentSpeechTime = Date.now(); // Apply cooldown immediately on manual stop or barge-in
+    window.lastAgentSpeechTime = Date.now(); 
     if (playbackContext) {
         nextPlaybackTime = playbackContext.currentTime;
     }
@@ -146,6 +150,37 @@ document.addEventListener("DOMContentLoaded", () => {
       
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
+      // Inject Auto-Recorder for Demo Video
+      if (selectedTemplate === "Demo Video") {
+          recordedChunks = [];
+          try {
+              mediaRecorder = new MediaRecorder(activeStream, { mimeType: 'video/webm; codecs=vp9' });
+              mediaRecorder.ondataavailable = function(e) {
+                  if (e.data.size > 0) {
+                      recordedChunks.push(e.data);
+                  }
+              };
+              mediaRecorder.onstop = function() {
+                  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.style.display = 'none';
+                  a.href = url;
+                  a.download = `Auditore_Demo_Video_${new Date().getTime()}.webm`;
+                  document.body.appendChild(a);
+                  a.click();
+                  setTimeout(() => {
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                  }, 100);
+              };
+              mediaRecorder.start();
+              logEvent("Auto-Recording Active: Session will download upon termination.");
+          } catch (err) {
+              logEvent("Warning: MediaRecorder initialization failed.");
+          }
+      }
+
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/stream?template=${encodeURIComponent(selectedTemplate)}`;
       socket = new WebSocket(wsUrl);
@@ -164,7 +199,8 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           window.vadInterval = setInterval(() => {
-              if (window.isCharonSpeaking || (Date.now() - window.lastAgentSpeechTime < 150)) return; 
+              // Ironclad 1000ms suppression barrier
+              if (window.isCharonSpeaking || (Date.now() - window.lastAgentSpeechTime < 1000)) return; 
 
               analyser.getByteFrequencyData(dataArray);
               let sum = 0;
@@ -174,6 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
               if (avg > 38) { 
                   logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
+                  window.lastAgentSpeechTime = Date.now(); // Reset barrier
                   if (socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ "client_event": "barge_in" }));
                   }
@@ -232,7 +269,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 const idx = activeAudioNodes.indexOf(source);
                 if (idx > -1) activeAudioNodes.splice(idx, 1);
                 if (activeAudioNodes.length === 0) {
-                    // Debounce the silent gap to account for network jitter
                     window.charonSpeakingTimeout = setTimeout(() => {
                         window.lastAgentSpeechTime = Date.now(); 
                         window.isCharonSpeaking = false;
@@ -240,7 +276,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             };
             
-            // Cancel debounce if a new audio chunk arrives in time
             if (window.charonSpeakingTimeout) {
                 clearTimeout(window.charonSpeakingTimeout);
                 window.charonSpeakingTimeout = null;
@@ -336,6 +371,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     stopAudioCapture();
     window.stopAgentAudio();
+
+    // Finalize recording if active
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        logEvent("Recording finalized and downloading.");
+    }
+    mediaRecorder = null;
     
     if (window.vadInterval) {
         clearInterval(window.vadInterval);

@@ -1,44 +1,66 @@
 // static/js/audio_processor.js
 let audioContext;
 let processor;
+let workletUrl;
+
+// Inline the AudioWorklet logic to ensure background processing for the Prototype
+const workletCode = `
+class PCMProcessor extends AudioWorkletProcessor {
+    process(inputs, outputs, parameters) {
+        const input = inputs[0];
+        if (!input || !input[0]) return true;
+        
+        const float32Array = input[0];
+        const int16Array = new Int16Array(float32Array.length);
+        
+        for (let i = 0; i < float32Array.length; i++) {
+            let s = Math.max(-1, Math.min(1, float32Array[i]));
+            int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        // Transfer the PCM buffer directly back to the main thread
+        this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
+        return true;
+    }
+}
+registerProcessor('pcm-processor', PCMProcessor);
+`;
 
 export async function startAudioCapture(webSocket, mediaStream) {
     try {
         if (!audioContext) {
-            // Initialize AudioContext at 16kHz explicitly inside user action stack
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
         }
         
-        // Browsers might suspend it initially
         if (audioContext.state === 'suspended') {
             await audioContext.resume();
         }
 
         const source = audioContext.createMediaStreamSource(mediaStream);
         
-        // 1024 buffer size significantly drops encoding latency from ~250ms down to ~64ms for real-time live capabilities.
-        processor = audioContext.createScriptProcessor(1024, 1, 1);
+        if (!workletUrl) {
+            const blob = new Blob([workletCode], { type: 'application/javascript' });
+            workletUrl = URL.createObjectURL(blob);
+        }
         
-        source.connect(processor);
-        processor.connect(audioContext.destination);
+        await audioContext.audioWorklet.addModule(workletUrl);
         
-        processor.onaudioprocess = (e) => {
-            // Drop processing if socket is not ready to avoid local buffering memory leaks
+        processor = new AudioWorkletNode(audioContext, 'pcm-processor');
+        
+        processor.port.onmessage = (e) => {
             if (!webSocket || webSocket.readyState !== WebSocket.OPEN) return;
             
-            // The Walkie-Talkie Drop has been removed to enable full-duplex interruptibility.
-            
-            const inputData = e.inputBuffer.getChannelData(0);
-            const pcmData = convertFloat32ToInt16(inputData);
-            
             try {
-                webSocket.send(pcmData);
+                webSocket.send(e.data);
             } catch (wsError) {
                 console.warn("Failed to send audio chunk to socket:", wsError);
             }
         };
         
-        console.log("Audio capture started: Raw PCM streaming active.");
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+        
+        console.log("Audio capture started: AudioWorklet PCM streaming active.");
         
     } catch (error) {
         console.error("Error setting up audio processor:", error);
@@ -55,15 +77,4 @@ export function stopAudioCapture() {
         audioContext = null;
     }
     console.log("Audio capture stopped.");
-}
-
-// Helper function to convert browser's native Float32 audio to 16-bit PCM
-function convertFloat32ToInt16(float32Array) {
-    let int16Array = new Int16Array(float32Array.length);
-    for (let i = 0; i < float32Array.length; i++) {
-        // Clamp the values to prevent clipping distortion
-        let s = Math.max(-1, Math.min(1, float32Array[i]));
-        int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return int16Array.buffer;
 }
