@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const centerNode = document.getElementById("donut-center-text");
     if (centerNode) {
-        centerNode.textContent = selectedTemplate ? selectedTemplate : "SELECT TEMPLATE";
+        centerNode.textContent = selectedTemplate ? selectedTemplate : "SELECT ARCHETYPE";
     }
   };
 
@@ -81,6 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeAudioNodes = [];
 
   window.isCharonSpeaking = false;
+  window.lastAgentSpeechTime = 0; // Timestamp to guard against acoustic feedback overlap
 
   window.stopAgentAudio = function() {
     activeAudioNodes.forEach(source => {
@@ -88,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     activeAudioNodes = [];
     window.isCharonSpeaking = false;
+    window.lastAgentSpeechTime = Date.now(); // Apply cooldown immediately on manual stop or barge-in
     if (playbackContext) {
         nextPlaybackTime = playbackContext.currentTime;
     }
@@ -157,8 +159,9 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           window.vadInterval = setInterval(() => {
-              // Echo Suppression: Only evaluate user speech if the agent is silent or input is extremely high
-              if (window.isCharonSpeaking) return; 
+              // The 150ms Echo Guard: Ignore triggers if the agent is speaking OR just finished speaking.
+              // This stops the acoustic feedback loop from starting a false barge-in.
+              if (window.isCharonSpeaking || (Date.now() - window.lastAgentSpeechTime < 150)) return; 
 
               analyser.getByteFrequencyData(dataArray);
               let sum = 0;
@@ -225,7 +228,10 @@ document.addEventListener("DOMContentLoaded", () => {
             source.onended = () => {
                 const idx = activeAudioNodes.indexOf(source);
                 if (idx > -1) activeAudioNodes.splice(idx, 1);
-                if (activeAudioNodes.length === 0) window.isCharonSpeaking = false;
+                if (activeAudioNodes.length === 0) {
+                    window.lastAgentSpeechTime = Date.now(); // Trigger 150ms cool-down
+                    window.isCharonSpeaking = false;
+                }
             };
             
             activeAudioNodes.push(source);

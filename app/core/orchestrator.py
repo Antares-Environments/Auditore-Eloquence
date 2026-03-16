@@ -42,21 +42,13 @@ class SessionOrchestrator:
                 await emit_event("Live API pipeline established. Streaming audio direct to matrix...")
                 
                 async def sender():
-                    last_send_time = time.time()
                     while True:
-                        try:
-                            # Use a timeout to send keepalives if idle
-                            item = await asyncio.wait_for(self.media_queue.get(), timeout=2.0)
-                        except asyncio.TimeoutError:
-                            # Send an empty audio chunk as a keepalive heartbeat every 2s
-                            try:
-                                await session.send_realtime_input(audio=types.Blob(data=b'\x00'*128, mime_type="audio/pcm;rate=16000"))
-                            except:
-                                pass
-                            continue
-
+                        # Removed redundant heartbeat timeout
+                        item = await self.media_queue.get()
+                        
                         if item is None:
                             break
+                        
                         media_type, blob_data, mime = item
                         try:
                             blob = types.Blob(data=blob_data, mime_type=mime)
@@ -64,55 +56,52 @@ class SessionOrchestrator:
                                 await session.send_realtime_input(audio=blob)
                             elif media_type == "video":
                                 await session.send_realtime_input(video=blob)
-                            last_send_time = time.time()
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
-                            break
+                            raise e
 
                 async def receiver():
-                    async for response in session.receive():
-                        # Primary path for audio
-                        if response.data:
-                            await send_audio(response.data)
+                    try:
+                        async for response in session.receive():
+                            # Primary path for audio
+                            if response.data:
+                                await send_audio(response.data)
 
-                        if response.server_content and response.server_content.model_turn:
-                            for part in response.server_content.model_turn.parts:
-                                # Fallback: check parts for audio data if SDK missed it
-                                if hasattr(part, 'inline_data') and part.inline_data:
-                                    await send_audio(part.inline_data.data)
-                                
-                                # Log thought/executable parts for diagnostics
-                                if hasattr(part, 'thought') and part.thought:
-                                    print(f"[DIAGNOSTIC] Model Thinking detected: {part.thought[:100]}...", flush=True)
-                                if hasattr(part, 'executable_code') and part.executable_code:
-                                    print(f"[DIAGNOSTIC] Model Code Block detected!", flush=True)
-
-                                if part.text:
-                                    raw = part.text.strip()
-                                    if not raw:
-                                        continue
+                            if response.server_content and response.server_content.model_turn:
+                                for part in response.server_content.model_turn.parts:
+                                    if hasattr(part, 'inline_data') and part.inline_data:
+                                        await send_audio(part.inline_data.data)
                                     
-                                    # Try parsing as a structured UI indicator JSON from System 1
-                                    try:
-                                        import json as _json
-                                        payload = _json.loads(raw)
-                                        if "indicator" in payload:
-                                            await emit_event(f"System 1 evaluation: {payload.get('message', '')}")
-                                            print(f"SYSTEM 1 PAYLOAD: {payload}", flush=True)
-                                            await send_json(payload)
+                                    if hasattr(part, 'thought') and part.thought:
+                                        print(f"[DIAGNOSTIC] Model Thinking detected: {part.thought[:100]}...", flush=True)
+                                    if hasattr(part, 'executable_code') and part.executable_code:
+                                        print(f"[DIAGNOSTIC] Model Code Block detected!", flush=True)
+
+                                    if part.text:
+                                        raw = part.text.strip()
+                                        if not raw:
                                             continue
-                                    except (_json.JSONDecodeError, ValueError):
-                                        pass
-                                    
-                                    # Queue text for decoupled background processing
-                                    await self.transcript_queue.put(raw)
+                                        
+                                        try:
+                                            import json as _json
+                                            payload = _json.loads(raw)
+                                            if "indicator" in payload:
+                                                await emit_event(f"System 1 evaluation: {payload.get('message', '')}")
+                                                await send_json(payload)
+                                                continue
+                                        except (_json.JSONDecodeError, ValueError):
+                                            pass
+                                        
+                                        await self.transcript_queue.put(raw)
 
-                        # input_audio_transcription arrives on a separate path
-                        if response.server_content and response.server_content.input_transcription:
-                            clean_text = response.server_content.input_transcription.text.strip()
-                            if clean_text:
-                                print(f"USER TRANSCRIPT: {clean_text}", flush=True)
-                                await self.transcript_queue.put(clean_text)
+                            if response.server_content and response.server_content.input_transcription:
+                                clean_text = response.server_content.input_transcription.text.strip()
+                                if clean_text:
+                                    print(f"USER TRANSCRIPT: {clean_text}", flush=True)
+                                    await self.transcript_queue.put(clean_text)
+                    except Exception as e:
+                        print(f"[RECEIVER ERROR] {e}", flush=True)
+                        raise e
 
                 async def analytics_processor():
                     while True:
@@ -125,15 +114,30 @@ class SessionOrchestrator:
                         except Exception as e:
                             print(f"[ANALYTICS ERROR] {e}", flush=True)
                 
-                # Protect gather to ensure clean shutdown if one coroutine fails
-                results = await asyncio.gather(sender(), receiver(), analytics_processor(), return_exceptions=True)
-                for res in results:
-                    if isinstance(res, Exception):
-                        print(f"[LIVE LOOP COROUTINE FAILED] {res}", flush=True)
+                # Supervisor Pattern implementation
+                tasks = [
+                    asyncio.create_task(sender()),
+                    asyncio.create_task(receiver()),
+                    asyncio.create_task(analytics_processor())
+                ]
                 
-        except asyncio.CancelledError as cancel_error:
-            print(f"\n[LIVE STREAM] Pipeline task cancelled: {cancel_error}", flush=True)
-            raise cancel_error
+                done, pending = await asyncio.wait(
+                    tasks,
+                    return_when=asyncio.FIRST_EXCEPTION
+                )
+                
+                # Cleanup: cancel remaining tasks if one fails
+                for task in pending:
+                    task.cancel()
+                
+                # Propagate exception to trigger UI alert
+                for task in done:
+                    if task.exception():
+                        raise task.exception()
+                
+        except asyncio.CancelledError:
+            print(f"\n[LIVE STREAM] Pipeline task cancelled.", flush=True)
+            raise
         except Exception as e:
             print(f"\n!!! [LIVE API ERROR] {e} !!!\n", flush=True)
             await emit_event(f"CRITICAL: Live API connection severed: {e}")
@@ -156,10 +160,8 @@ class SessionOrchestrator:
         try:
             image_bytes = base64.b64decode(base64_image)
             
-            # Queue for System 1 (Live API)
             await self.media_queue.put(("video", image_bytes, "image/jpeg"))
             
-            # Buffer for System 2 (Async Council) - Keep memory light by storing only the 3 most recent frames
             if len(self.visual_buffer) >= 3:
                 self.visual_buffer.pop(0)
             self.visual_buffer.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
@@ -184,14 +186,12 @@ class SessionOrchestrator:
             if emit_event:
                 await emit_event("Routing accumulated transcript buffer and visual context to Background Council...")
             
-            # Persist transcript lightly without a database
             try:
                 with open("session_transcript.txt", "a", encoding="utf-8") as f:
                     f.write(f"[{time.strftime('%H:%M:%S')}] {self.transcript_buffer}\n")
-            except Exception as e:
+            except:
                 pass
             
-            # Extract and clear the visual buffer for the current council run
             current_visual_context = list(self.visual_buffer)
             self.visual_buffer.clear()
             
