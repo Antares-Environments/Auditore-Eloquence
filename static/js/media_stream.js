@@ -116,10 +116,27 @@ document.addEventListener("DOMContentLoaded", () => {
       videoFeed.play();
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
+      // Initialize Unified Audio Context for Mixing
+      window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Inject Unified Auto-Recorder with Mixed Audio for Demo Video
       if (selectedTemplate === "Demo Video") {
           recordedChunks = [];
           try {
-              mediaRecorder = new MediaRecorder(activeStream, { mimeType: 'video/webm; codecs=vp9' });
+              // Create virtual destination for the matrix mixer
+              window.recordingDestination = window.audioCtx.createMediaStreamDestination();
+              
+              // 1. Connect local mic to the mixer
+              const micSource = window.audioCtx.createMediaStreamSource(activeStream);
+              micSource.connect(window.recordingDestination);
+
+              // 2. Combine Screen/Camera with Mixed Audio
+              const combinedStream = new MediaStream([
+                  ...activeStream.getVideoTracks(),
+                  ...window.recordingDestination.stream.getAudioTracks()
+              ]);
+
+              mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9' });
               mediaRecorder.ondataavailable = function(e) {
                   if (e.data.size > 0) recordedChunks.push(e.data);
               };
@@ -138,7 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   }, 100);
               };
               mediaRecorder.start();
-              logEvent("Auto-Recording Active: Session will download upon termination.");
+              logEvent("Auto-Recording Active: Combined audio matrix engaged.");
           } catch (err) {
               logEvent("Warning: MediaRecorder initialization failed.");
           }
@@ -153,7 +170,6 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           startAudioCapture(socket, activeStream);
 
-          window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const analyser = window.audioCtx.createAnalyser();
           const micSource = window.audioCtx.createMediaStreamSource(activeStream);
           micSource.connect(analyser);
@@ -168,7 +184,6 @@ document.addEventListener("DOMContentLoaded", () => {
               for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
               let avg = sum / dataArray.length;
               
-              // Only trigger VAD interruption if we are NOT auditing a Demo Video
               if (avg > 38 && selectedTemplate !== "Demo Video") { 
                   logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
@@ -219,6 +234,11 @@ document.addEventListener("DOMContentLoaded", () => {
             const source = playbackContext.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(playbackContext.destination);
+
+            // Connect agent voice to the recording destination if auditing
+            if (window.recordingDestination) {
+                source.connect(window.recordingDestination);
+            }
 
             source.onended = () => {
                 const idx = activeAudioNodes.indexOf(source);
@@ -324,6 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
         logEvent("Recording finalized and downloading.");
     }
     mediaRecorder = null;
+    window.recordingDestination = null;
     
     if (window.vadInterval) {
         clearInterval(window.vadInterval);
