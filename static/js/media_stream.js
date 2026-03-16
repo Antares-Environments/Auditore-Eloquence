@@ -1,3 +1,6 @@
+// static/js/media_stream.js
+import { startAudioCapture, stopAudioCapture } from './audio_processor.js';
+
 document.addEventListener("DOMContentLoaded", () => {
   const sessionToggle = document.getElementById("session-toggle");
   const statusIndicator = document.getElementById("status-indicator");
@@ -11,100 +14,58 @@ document.addEventListener("DOMContentLoaded", () => {
   const eventLog = document.getElementById("live-event-log");
 
   let socket;
-  let mediaRecorder;
   let activeStream;
   let selectedTemplate = "";
-  let templateData = {};
-  let speechEngine; 
+  let templateData = window.TEMPLATE_DATA || {};
   let isSessionActive = false;
 
-  const rawTemplates = donutContainer.getAttribute("data-templates");
-  
-  if (rawTemplates) {
-    templateData = JSON.parse(rawTemplates);
-    const templateNames = Object.keys(templateData);
-    
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("id", "donut-svg");
-    svg.setAttribute("viewBox", "0 0 300 300");
-
-    const size = 300;
-    const center = size / 2;
-    const radius = 110;
-    const strokeWidth = 50;
-    const total = templateNames.length;
-    const gapAngle = total > 1 ? 0.05 : 0;
-
-    if (total === 1) {
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute("cx", center);
-      circle.setAttribute("cy", center);
-      circle.setAttribute("r", radius);
-      circle.setAttribute("fill", "none");
-      circle.setAttribute("class", "donut-slice");
-      attachSliceEvent(circle, templateNames[0]);
-      svg.appendChild(circle);
-    } else {
-      const anglePerSlice = (Math.PI * 2) / total;
-      templateNames.forEach((templateName, i) => {
-        const startAngle = i * anglePerSlice + gapAngle;
-        const endAngle = (i + 1) * anglePerSlice - gapAngle;
-
-        const getX = (angle) => center + radius * Math.cos(angle);
-        const getY = (angle) => center + radius * Math.sin(angle);
-
-        const startX = getX(startAngle);
-        const startY = getY(startAngle);
-        const endX = getX(endAngle);
-        const endY = getY(endAngle);
-
-        const largeArcFlag = (endAngle - startAngle) > Math.PI ? 1 : 0;
-        const d = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
-
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", d);
-        path.setAttribute("fill", "none");
-        path.setAttribute("class", "donut-slice");
-
-        attachSliceEvent(path, templateName);
-        svg.appendChild(path);
-      });
+  // Globally expose hover interaction functions for SVG inline handlers
+  window.hoverRingItem = function(selectedId, categoryLabel) {
+    const slice = document.getElementById('slice-' + selectedId);
+    if (slice) {
+        slice.classList.add("hover");
     }
-    donutContainer.appendChild(svg);
-  }
+    const centerNode = document.getElementById("donut-center-text");
+    if (centerNode) {
+        centerNode.textContent = categoryLabel;
+    }
+  };
 
-  function attachSliceEvent(path, templateName) {
-    path.addEventListener("mouseenter", () => {
-      if (selectedTemplate !== templateName) {
-        path.style.stroke = "var(--element-jade)";
-      }
-      centerText.textContent = templateName;
-    });
+  window.resetRingItem = function(selectedId) {
+    const slice = document.getElementById('slice-' + selectedId);
+    if (slice) {
+        slice.classList.remove("hover");
+    }
+    const centerNode = document.getElementById("donut-center-text");
+    if (centerNode) {
+        centerNode.textContent = selectedTemplate ? selectedTemplate : "SELECT TEMPLATE";
+    }
+  };
 
-    path.addEventListener("mouseleave", () => {
-      if (selectedTemplate !== templateName) {
-        path.style.stroke = "var(--indicator-white)";
-      }
-      centerText.textContent = selectedTemplate ? selectedTemplate : "SELECT TEMPLATE";
+  window.clickRingItem = function(selectedId, categoryLabel) {
+    document.querySelectorAll(".donut-slice").forEach(p => {
+        p.classList.remove("selected", "hover");
     });
-
-    path.addEventListener("click", () => {
-      document.querySelectorAll(".donut-slice").forEach(p => {
-        p.classList.remove("selected");
-        p.style.stroke = "var(--indicator-white)";
-      });
-      
-      path.classList.add("selected");
-      path.style.stroke = "var(--indicator-yellow)";
-      
-      selectedTemplate = templateName;
-      centerText.textContent = templateName;
-      centerText.style.borderColor = "var(--element-olive)";
-      
-      templateDetails.style.display = "block";
-      templateDetails.textContent = templateData[templateName];
-    });
-  }
+    
+    const activeSlice = document.getElementById('slice-' + selectedId);
+    if (activeSlice) {
+        activeSlice.classList.add("selected");
+    }
+    
+    selectedTemplate = categoryLabel;
+    
+    const centerNode = document.getElementById("donut-center-text");
+    if (centerNode) {
+        centerNode.textContent = categoryLabel;
+        centerNode.style.borderColor = "var(--element-olive)";
+    }
+    
+    const detailsNode = document.getElementById("template-details");
+    if (detailsNode) {
+        detailsNode.style.display = "block";
+        detailsNode.textContent = templateData[categoryLabel]?.description || "Template configuration loaded.";
+    }
+  };
 
   function logEvent(message) {
     const time = new Date().toLocaleTimeString();
@@ -132,60 +93,37 @@ document.addEventListener("DOMContentLoaded", () => {
       activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       videoFeed.srcObject = activeStream;
       videoFeed.play();
+      
+      const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
+      logEvent(`Template Config: Video Auditing is ${requiresVideo ? "ENABLED" : "DISABLED"}`);
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/stream?template=${encodeURIComponent(selectedTemplate)}`;
       socket = new WebSocket(wsUrl);
 
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        speechEngine = new SpeechRecognition();
-        speechEngine.continuous = true;
-        speechEngine.interimResults = false; 
-        
-        speechEngine.onresult = (event) => {
-          let finalTranscript = "";
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            }
-          }
-          if (finalTranscript.trim().length > 0 && socket.readyState === WebSocket.OPEN) {
-            logEvent(`Microphone caught: "${finalTranscript.trim()}"`);
-            socket.send(JSON.stringify({ text: finalTranscript }));
-          }
-        };
-      }
-
       socket.onopen = () => {
         logEvent("Secure socket established with backend engine.");
         
         try {
-          const audioOnlyStream = new MediaStream(activeStream.getAudioTracks());
+          // Initialize Web Audio API processor
+          startAudioCapture(socket, activeStream);
 
-          let selectedMimeType = '';
-          const supportedTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
-          for (const type of supportedTypes) {
-            if (MediaRecorder.isTypeSupported(type)) {
-              selectedMimeType = type;
-              break;
-            }
+          if (requiresVideo) {
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
+              
+              window.videoAuditInterval = setInterval(() => {
+                  if (socket.readyState === WebSocket.OPEN && videoFeed.readyState === videoFeed.HAVE_ENOUGH_DATA) {
+                      // Low resolution to respect Gemini token/bandwidth limits
+                      canvas.width = 640;
+                      canvas.height = 480;
+                      ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
+                      
+                      const base64Frame = canvas.toDataURL("image/jpeg", 0.7);
+                      socket.send(JSON.stringify({ "video_frame": base64Frame }));
+                  }
+              }, 2000); // 2-second capture interval
           }
-          
-          const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
-          logEvent(`Audio engine locked: ${selectedMimeType || 'System Default'}`);
-          
-          mediaRecorder = new MediaRecorder(audioOnlyStream, options);
-          
-          mediaRecorder.ondataavailable = async (event) => {
-            if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-              const buffer = await event.data.arrayBuffer();
-              socket.send(buffer);
-            }
-          };
-          
-          mediaRecorder.start(250);
-          if (speechEngine) speechEngine.start();
 
           statusIndicator.className = "green";
           statusIndicator.textContent = `ACTIVE: ${selectedTemplate}`;
@@ -197,12 +135,44 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       };
 
+      let playbackContext;
+      let nextPlaybackTime = 0;
+
       socket.onmessage = async (event) => {
         if (event.data instanceof Blob) {
             logEvent("[AUDIO FRAME RECEIVED] Intercepted binary speech. Playing audio...");
-            const url = URL.createObjectURL(event.data);
-            const audio = new Audio(url);
-            audio.play();
+            
+            if (!playbackContext) {
+                playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            }
+            if (playbackContext.state === 'suspended') {
+                await playbackContext.resume();
+            }
+
+            const arrayBuffer = await event.data.arrayBuffer();
+            const int16Array = new Int16Array(arrayBuffer);
+            const float32Array = new Float32Array(int16Array.length);
+            
+            // Normalize Int16 to Float32 [-1.0, 1.0]
+            for (let i = 0; i < int16Array.length; i++) {
+                float32Array[i] = int16Array[i] / 32768.0;
+            }
+
+            const audioBuffer = playbackContext.createBuffer(1, float32Array.length, 24000);
+            audioBuffer.getChannelData(0).set(float32Array);
+
+            const source = playbackContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(playbackContext.destination);
+
+            const currentTime = playbackContext.currentTime;
+            if (nextPlaybackTime < currentTime) {
+                // If we've fallen behind, start playback slightly in the future
+                nextPlaybackTime = currentTime + 0.01;
+            }
+            
+            source.start(nextPlaybackTime);
+            nextPlaybackTime += audioBuffer.duration;
             return;
         }
 
@@ -219,17 +189,48 @@ document.addEventListener("DOMContentLoaded", () => {
           statusIndicator.textContent = data.message;
         }
         
-        if (data.async_results && data.async_results.pacing) {
-          if (data.async_results.pacing.indicator !== "green") {
-            logEvent(`[WARNING] Pacing anomaly detected: ${data.async_results.pacing.message}`);
-            statusIndicator.className = data.async_results.pacing.indicator;
-            statusIndicator.textContent = data.async_results.pacing.message;
+        if (data.async_results) {
+          // 1. Render Pacing
+          if (data.async_results.pacing) {
+            const pace = data.async_results.pacing;
+            // Only log if it's a violation, but ALWAYS update the visual indicator
+            if (pace.indicator !== "green" && pace.indicator !== "white") {
+              logEvent(`[WARNING] Pacing anomaly detected: ${pace.message}`);
+            }
+            statusIndicator.className = pace.indicator;
+            statusIndicator.textContent = pace.message;
+          }
+          
+          // 2. Render Council Output (Every 15s)
+          if (data.async_results.council && Array.isArray(data.async_results.council)) {
+            data.async_results.council.forEach(evalResult => {
+                if (evalResult && evalResult.message) {
+                    logEvent(`[COUNCIL] ${evalResult.message}`);
+                    // Only let the council hijack the color panel if it's not green
+                    if (evalResult.indicator !== "green") {
+                        statusIndicator.className = evalResult.indicator;
+                        statusIndicator.textContent = evalResult.message;
+                    }
+                }
+            });
           }
         }
       };
 
-      socket.onclose = () => {
-        logEvent("Socket disconnected.");
+      socket.onclose = (e) => {
+        logEvent(`Socket disconnected. Code: ${e.code}, Reason: ${e.reason || "Unknown"}`);
+        if(e.code !== 1000 && e.code !== 1001) {
+             statusIndicator.className = "red";
+             statusIndicator.textContent = "CONNECTION LOST";
+        }
+        terminateSessionUI();
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket Error:", error);
+        logEvent("CRITICAL ERROR: Connection to backend failed.");
+        statusIndicator.className = "red";
+        statusIndicator.textContent = "ENGINE FAULT";
         terminateSessionUI();
       };
 
@@ -250,8 +251,13 @@ document.addEventListener("DOMContentLoaded", () => {
     idlePanel.style.display = "flex";
     activeSessionPanel.style.display = "none";
 
-    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
-    if (speechEngine) speechEngine.stop();
+    stopAudioCapture();
+    
+    if (window.videoAuditInterval) {
+        clearInterval(window.videoAuditInterval);
+        window.videoAuditInterval = null;
+    }
+    
     if (socket && socket.readyState === WebSocket.OPEN) socket.close();
     if (activeStream) {
       activeStream.getTracks().forEach(track => track.stop());

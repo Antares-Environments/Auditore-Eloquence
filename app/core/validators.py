@@ -47,6 +47,7 @@ class PythonOrchestratorThresholds(BaseModel):
     wpm_lower_limit: int
     wpm_violation_trigger: str
     enforce_time_limit_seconds: int
+    requires_video_audit: bool
 
 class AuditoreTemplate(BaseModel):
     template_metadata: TemplateMetadata

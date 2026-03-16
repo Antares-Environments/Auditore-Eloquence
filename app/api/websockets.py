@@ -12,18 +12,24 @@ async def stream_handler(ws):
     async def emit_event(message: str):
         try:
             await ws.send_json({"system_event": message})
+        except WebSocketDisconnect:
+            pass
         except Exception as e:
             print(f"[EMIT EVENT ERROR] {e}", flush=True)
             
     async def send_json(data: dict):
         try:
             await ws.send_json(data)
+        except WebSocketDisconnect:
+            pass
         except Exception as e:
             print(f"[SEND JSON ERROR] {e}", flush=True)
             
     async def send_audio(audio_bytes: bytes):
         try:
             await ws.send_bytes(audio_bytes)
+        except WebSocketDisconnect:
+            pass
         except Exception as e:
             print(f"[SEND AUDIO ERROR] {e}", flush=True)
 
@@ -65,13 +71,30 @@ async def stream_handler(ws):
                 await orchestrator.process_audio_stream(message["bytes"])
                     
             elif "text" in message:
-                asyncio.create_task(process_text_task(message["text"]))
+                try:
+                    parsed_payload = json.loads(message["text"])
+                    if "video_frame" in parsed_payload:
+                        await orchestrator.process_video_frame(parsed_payload["video_frame"])
+                    else:
+                        asyncio.create_task(process_text_task(message["text"]))
+                except json.JSONDecodeError:
+                    # Fallback to assumed standard script handling if parsing fails
+                    asyncio.create_task(process_text_task(message["text"]))
                     
     except WebSocketDisconnect:
         print("\n--- SESSION CLOSED BY CLIENT ---", flush=True)
+    except RuntimeError as re:
+        if "Cannot call 'receive' once a disconnect message has been received" in str(re) or "Unexpected ASGI message" in str(re):
+             print("\n--- SOCKET TERMINATED ABRUPTLY ---", flush=True)
+        else:
+             print(f"\n!!! BACKEND RUNTIME FAULT DETECTED: {re} !!!\n", flush=True)
+             raise re
     except Exception as e:
-        print(f"\n!!! BACKEND CRASH DETECTED: {e} !!!\n", flush=True)
-        await emit_event(f"Warning: System realignment required due to engine fault. {e}")
+        print(f"\n!!! BACKEND FAULT DETECTED: {e} !!!\n", flush=True)
+        try:
+            await emit_event(f"Warning: System realignment required due to engine fault. {e}")
+        except:
+            pass # Socket already dead
         raise e
     finally:
         await orchestrator.terminate()

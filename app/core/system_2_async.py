@@ -18,13 +18,25 @@ class BackgroundCouncil:
         return base
 
     async def evaluate_transcript(self, transcript: str):
-        results = []
+        tasks = []
+        # Free tier is ~15 RPM for 2.5 Flash. We use a short delay between fires if the council is large.
+        delay = 0.0
         for member in self.council_config:
             instruction = self._build_instruction(member)
-            result = await self._call_model(instruction, transcript)
-            results.append(result)
-            await asyncio.sleep(1)
-        return results
+            tasks.append(self._delayed_call(instruction, transcript, delay))
+            delay += 1.5
+            
+        # Execute all council members concurrently without crashing the orchestrator if one fails
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out exceptions to prevent downstream json parsing failures
+        valid_results = [r for r in results if not isinstance(r, Exception)]
+        return valid_results
+
+    async def _delayed_call(self, instruction: str, transcript: str, delay: float):
+        if delay > 0:
+            await asyncio.sleep(delay)
+        return await self._call_model(instruction, transcript)
 
     async def _call_model(self, instruction: str, transcript: str):
         max_retries = 3
@@ -42,6 +54,9 @@ class BackgroundCouncil:
                 )
                 return json.loads(response.text)
             except Exception as e:
+                # 429 logic or other network faults
+                print(f"[COUNCIL RETRY] Attempt {attempt+1}/{max_retries} failed for role '{instruction.split('Role: ')[1].split(chr(10))[0]}': {e}", flush=True)
                 if attempt == max_retries - 1:
+                    print(f"[COUNCIL FAILURE] Member evaluation failed after {max_retries} attempts.", flush=True)
                     raise e
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2 ** attempt + 1) # Exponential with jitter bases

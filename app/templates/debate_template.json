@@ -62,9 +62,10 @@
   ],
   "python_orchestrator_thresholds": {
     "track_wpm": true,
-    "wpm_upper_limit": 160,
+    "wpm_upper_limit": 150,
     "wpm_lower_limit": 110,
-    "wpm_violation_trigger": "orange",
-    "enforce_time_limit_seconds": 300
+    "wpm_violation_trigger": "yellow",
+    "enforce_time_limit_seconds": 180,
+    "requires_video_audit": false
   }
 }

@@ -1,7 +1,8 @@
+# app/core/orchestrator.py
 import asyncio
-import json
 import time
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
+from google.genai import types
 from app.core.validators import ACTIVE_TEMPLATES, AuditoreTemplate
 from app.core.system_1_live import LiveSessionManager
 from app.core.system_2_async import BackgroundCouncil
@@ -22,8 +23,9 @@ class SessionOrchestrator:
         
         self.monitor = ThresholdMonitor(self.thresholds.model_dump())
         
-        self.audio_queue = asyncio.Queue()
-        self.live_task = None
+        self.media_queue: asyncio.Queue[Optional[Any]] = asyncio.Queue()
+        self.transcript_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+        self.live_task: Optional[asyncio.Task] = None
         
         self.transcript_buffer = ""
         self.last_council_time = 0.0
@@ -39,39 +41,94 @@ class SessionOrchestrator:
                 await emit_event("Live API pipeline established. Streaming audio direct to matrix...")
                 
                 async def sender():
+                    last_send_time = time.time()
                     while True:
-                        chunk = await self.audio_queue.get()
-                        if chunk is None:
+                        try:
+                            # Use a timeout to send keepalives if idle
+                            item = await asyncio.wait_for(self.media_queue.get(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            # Send an empty audio chunk as a keepalive heartbeat every 2s
+                            try:
+                                await session.send_realtime_input(audio=types.Blob(data=b'\x00'*128, mime_type="audio/pcm;rate=16000"))
+                            except:
+                                pass
+                            continue
+
+                        if item is None:
                             break
-                        await session.send(input={"data": chunk, "mime_type": "audio/webm"})
+                        media_type, blob_data, mime = item
+                        try:
+                            blob = types.Blob(data=blob_data, mime_type=mime)
+                            if media_type == "audio":
+                                await session.send_realtime_input(audio=blob)
+                            elif media_type == "video":
+                                await session.send_realtime_input(video=blob)
+                            last_send_time = time.time()
+                        except Exception as e:
+                            print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
+                            break
 
                 async def receiver():
-                    buffer = ""
                     async for response in session.receive():
+                        # Primary path for audio
+                        if response.data:
+                            await send_audio(response.data)
+
                         if response.server_content and response.server_content.model_turn:
                             for part in response.server_content.model_turn.parts:
-                                if part.inline_data:
+                                # Fallback: check parts for audio data if SDK missed it
+                                if hasattr(part, 'inline_data') and part.inline_data:
                                     await send_audio(part.inline_data.data)
-                                    
+                                
+                                # Log thought/executable parts for diagnostics
+                                if hasattr(part, 'thought') and part.thought:
+                                    print(f"[DIAGNOSTIC] Model Thinking detected: {part.thought[:100]}...", flush=True)
+                                if hasattr(part, 'executable_code') and part.executable_code:
+                                    print(f"[DIAGNOSTIC] Model Code Block detected!", flush=True)
+
                                 if part.text:
-                                    buffer += part.text
-                                    clean_text = buffer.strip()
+                                    raw = part.text.strip()
+                                    if not raw:
+                                        continue
                                     
-                                    if "{" in clean_text and "}" in clean_text:
-                                        try:
-                                            start = clean_text.find("{")
-                                            end = clean_text.rfind("}") + 1
-                                            json_str = clean_text[start:end]
-                                            parsed = json.loads(json_str)
-                                            buffer = "" 
-                                            
-                                            await emit_event("System 1 live evaluation captured.")
-                                            print(f"SYSTEM 1 OUTPUT: {parsed}", flush=True)
-                                            await send_json(parsed)
-                                        except json.JSONDecodeError as decode_error:
-                                            print(f"[JSON STREAM BUFFER] Accumulating chunk payload: {decode_error}", flush=True)
+                                    # Try parsing as a structured UI indicator JSON from System 1
+                                    try:
+                                        import json as _json
+                                        payload = _json.loads(raw)
+                                        if "indicator" in payload:
+                                            await emit_event(f"System 1 evaluation: {payload.get('message', '')}")
+                                            print(f"SYSTEM 1 PAYLOAD: {payload}", flush=True)
+                                            await send_json(payload)
+                                            continue
+                                    except (_json.JSONDecodeError, ValueError):
+                                        pass
+                                    
+                                    # Queue text for decoupled background processing
+                                    await self.transcript_queue.put(raw)
+
+                        # input_audio_transcription arrives on a separate path
+                        if response.server_content and response.server_content.input_transcription:
+                            clean_text = response.server_content.input_transcription.text.strip()
+                            if clean_text:
+                                print(f"USER TRANSCRIPT: {clean_text}", flush=True)
+                                await self.transcript_queue.put(clean_text)
+
+                async def analytics_processor():
+                    while True:
+                        text = await self.transcript_queue.get()
+                        if text is None:
+                            break
+                        try:
+                            result = await self.process_async_transcript(text, emit_event)
+                            await send_json({"async_results": result})
+                        except Exception as e:
+                            print(f"[ANALYTICS ERROR] {e}", flush=True)
                 
-                await asyncio.gather(sender(), receiver())
+                # Protect gather to ensure clean shutdown if one coroutine fails
+                results = await asyncio.gather(sender(), receiver(), analytics_processor(), return_exceptions=True)
+                for res in results:
+                    if isinstance(res, Exception):
+                        print(f"[LIVE LOOP COROUTINE FAILED] {res}", flush=True)
                 
         except asyncio.CancelledError as cancel_error:
             print(f"\n[LIVE STREAM] Pipeline task cancelled: {cancel_error}", flush=True)
@@ -82,15 +139,27 @@ class SessionOrchestrator:
             raise e
 
     async def process_audio_stream(self, audio_chunk: bytes):
-        await self.audio_queue.put(audio_chunk)
+        await self.media_queue.put(("audio", audio_chunk, "audio/pcm;rate=16000"))
+
+    async def process_video_frame(self, base64_image: str):
+        if not self.thresholds.requires_video_audit:
+            return
+        if "," in base64_image:
+            base64_image = base64_image.split(",")[1]
+        import base64
+        try:
+            image_bytes = base64.b64decode(base64_image)
+            await self.media_queue.put(("video", image_bytes, "image/jpeg"))
+        except Exception as e:
+            print(f"[VISION SYSTEM ERROR] Failed to decode camera metric payload: {e}")
 
     async def process_async_transcript(self, transcript: str, emit_event=None):
         self.transcript_buffer += transcript + " "
-        word_count = len(transcript.split())
-        self.monitor.update_words(word_count)
+        total_word_count = len(self.transcript_buffer.split())
+        self.monitor.update_words(total_word_count)
         
         if emit_event: 
-            await emit_event(f"Calculating pacing telemetry for {word_count} incoming words...")
+            await emit_event(f"Calculating pacing telemetry for {total_word_count} ongoing words...")
             
         pacing_state = self.monitor.evaluate_thresholds()
         council_evaluations = None
@@ -100,6 +169,13 @@ class SessionOrchestrator:
         if current_time - self.last_council_time >= self.COUNCIL_COOLDOWN:
             if emit_event:
                 await emit_event("Routing accumulated transcript buffer to Background Council...")
+            
+            # Persist transcript lightly without a database
+            try:
+                with open("session_transcript.txt", "a", encoding="utf-8") as f:
+                    f.write(f"[{time.strftime('%H:%M:%S')}] {self.transcript_buffer}\n")
+            except Exception as e:
+                pass
             
             council_evaluations = await self.background_council.evaluate_transcript(self.transcript_buffer)
             
@@ -115,7 +191,7 @@ class SessionOrchestrator:
         }
 
     async def terminate(self):
-        await self.audio_queue.put(None)
+        await self.media_queue.put(None)
         if self.live_task:
             self.live_task.cancel()
 

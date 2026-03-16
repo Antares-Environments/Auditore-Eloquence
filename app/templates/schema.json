@@ -211,6 +211,9 @@
           },
           "enforce_time_limit_seconds": {
             "type": "integer"
+          },
+          "requires_video_audit": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -218,7 +221,8 @@
           "wpm_upper_limit",
           "wpm_lower_limit",
           "wpm_violation_trigger",
-          "enforce_time_limit_seconds"
+          "enforce_time_limit_seconds",
+          "requires_video_audit"
         ]
       }
     },

@@ -1,21 +1,43 @@
+# app/core/threshold_math.py
 import time
 from typing import Dict, Any
+from collections import deque
 
 class ThresholdMonitor:
     def __init__(self, thresholds: Dict[str, Any]):
         self.thresholds = thresholds
         self.start_time = time.time()
-        self.word_count = 0
+        self.word_history = deque()
+        self.rolling_window_seconds = 60.0
 
-    def update_words(self, new_words: int):
-        self.word_count += new_words
+    def update_words(self, current_total_words: int):
+        current_time = time.time()
+        self.word_history.append((current_time, current_total_words))
+        self._prune_history(current_time)
+
+    def _prune_history(self, current_time: float):
+        # Remove word entries older than the 60-second rolling window
+        while self.word_history and (current_time - self.word_history[0][0]) > self.rolling_window_seconds:
+            self.word_history.popleft()
 
     def calculate_wpm(self) -> float:
-        elapsed_minutes = (time.time() - self.start_time) / 60.0
-        # Absolute mathematical zero protection
-        if elapsed_minutes <= 0.0001: 
+        current_time = time.time()
+        self._prune_history(current_time)
+
+        if len(self.word_history) < 2:
             return 0.0
-        return self.word_count / elapsed_minutes
+
+        # Calculate delta between the oldest and newest records in the current window
+        oldest_time, oldest_count = self.word_history[0]
+        newest_time, newest_count = self.word_history[-1]
+        
+        words_spoken_in_window = newest_count - oldest_count
+        elapsed_seconds_in_window = newest_time - oldest_time
+        
+        # Absolute mathematical zero protection
+        elapsed_seconds_in_window = max(1.0, elapsed_seconds_in_window) 
+        
+        return (words_spoken_in_window / elapsed_seconds_in_window) * 60.0
 
     def evaluate_thresholds(self) -> Dict[str, str]:
         if not self.thresholds.get("track_wpm", False):
