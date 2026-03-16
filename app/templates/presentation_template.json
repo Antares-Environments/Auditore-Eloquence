@@ -1,0 +1,74 @@
+{
+    "template_metadata": {
+      "name": "Dynamic Presentation",
+      "version": "1.0",
+      "author": "Antares Agentic Environments",
+      "description": "Simulates a live audience for a seminar or presentation. The agent actively engages, asks clarifying questions, and audits the delivery."
+    },
+    "system_1_live_socket": {
+      "specialist_role": "Active Audience Member",
+      "primary_objective": "Act as an engaged audience member during a presentation. Ask relevant clarifying questions and maintain a natural, active dialogue. Interrupt politely if a critical logic gap is detected.",
+      "interaction_mode": "active",
+      "input_modality": "video",
+      "model_parameters": {
+        "temperature": 0.6,
+        "interruption_priority": "medium"
+      },
+      "few_shot_calibration": [
+        {
+          "user_input": "And so, our revenue will simply double next quarter.",
+          "expected_output": {
+            "flaw": "Unsubstantiated Claim",
+            "status": "Missing Evidence",
+            "indicator": "orange",
+            "interruption": true,
+            "message": "Could you clarify the evidence supporting that revenue projection?"
+          }
+        },
+        {
+          "user_input": "By implementing this architecture, we reduced our latency by forty percent.",
+          "expected_output": {
+            "flaw": null,
+            "status": "Strong Point",
+            "indicator": "green",
+            "interruption": false,
+            "message": "Clear value proposition."
+          }
+        }
+      ],
+      "rag_dictionary_injected": [
+        {
+          "rule": "Unsubstantiated Claim",
+          "definition": "Making a significant claim without providing immediate evidence or metrics.",
+          "ui_trigger": "orange"
+        },
+        {
+          "rule": "Jargon Overload",
+          "definition": "Excessive use of technical terminology that alienates a general audience.",
+          "ui_trigger": "red"
+        }
+      ]
+    },
+    "system_2_async_council": [
+      {
+        "specialist_role": "Narrative Evaluator",
+        "primary_objective": "Review visual cues and the transcript to evaluate whether the core thesis of the presentation is being effectively communicated and visually supported.",
+        "rag_dictionary_injected": [
+          {
+            "rule": "Thematic Coherence",
+            "definition": "The speaker successfully connects their immediate point back to the overarching thesis.",
+            "ui_trigger": "green"
+          }
+        ]
+      }
+    ],
+    "python_orchestrator_thresholds": {
+      "track_wpm": true,
+      "wpm_upper_limit": 150,
+      "wpm_lower_limit": 110,
+      "wpm_violation_trigger": "orange",
+      "enforce_time_limit_seconds": 900,
+      "requires_video_audit": true,
+      "requires_screen_audit": false
+    }
+  }

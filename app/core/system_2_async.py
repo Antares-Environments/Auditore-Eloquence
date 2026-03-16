@@ -17,13 +17,18 @@ class BackgroundCouncil:
             base += f"- {item.rule}: {item.definition} (Trigger: {item.ui_trigger})\n"
         return base
 
-    async def evaluate_transcript(self, transcript: str):
+    async def evaluate_transcript(self, transcript: str, visual_context: list = None):
         tasks = []
-        # Free tier is ~15 RPM for 2.5 Flash. We use a short delay between fires if the council is large.
         delay = 0.0
+        
+        # Construct the multimodal payload
+        payload = [transcript]
+        if visual_context:
+            payload.extend(visual_context)
+            
         for member in self.council_config:
             instruction = self._build_instruction(member)
-            tasks.append(self._delayed_call(instruction, transcript, delay))
+            tasks.append(self._delayed_call(instruction, payload, delay))
             delay += 1.5
             
         # Execute all council members concurrently without crashing the orchestrator if one fails
@@ -33,18 +38,18 @@ class BackgroundCouncil:
         valid_results = [r for r in results if not isinstance(r, Exception)]
         return valid_results
 
-    async def _delayed_call(self, instruction: str, transcript: str, delay: float):
+    async def _delayed_call(self, instruction: str, payload: list, delay: float):
         if delay > 0:
             await asyncio.sleep(delay)
-        return await self._call_model(instruction, transcript)
+        return await self._call_model(instruction, payload)
 
-    async def _call_model(self, instruction: str, transcript: str):
+    async def _call_model(self, instruction: str, payload: list):
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 response = await self.client.aio.models.generate_content(
                     model=self.model,
-                    contents=transcript,
+                    contents=payload,
                     config=types.GenerateContentConfig(
                         system_instruction=instruction,
                         temperature=0.2,

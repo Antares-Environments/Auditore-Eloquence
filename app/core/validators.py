@@ -32,6 +32,8 @@ class RagDictionaryItem(BaseModel):
 class System1LiveSocket(BaseModel):
     specialist_role: str
     primary_objective: str
+    interaction_mode: str = "passive"
+    input_modality: str = "audio"
     model_parameters: ModelParameters
     few_shot_calibration: List[FewShotCalibration]
     rag_dictionary_injected: List[RagDictionaryItem]
@@ -48,6 +50,7 @@ class PythonOrchestratorThresholds(BaseModel):
     wpm_violation_trigger: str
     enforce_time_limit_seconds: int
     requires_video_audit: bool
+    requires_screen_audit: bool = False
 
 class AuditoreTemplate(BaseModel):
     template_metadata: TemplateMetadata
@@ -72,5 +75,4 @@ def load_templates():
             validated_template = AuditoreTemplate(**raw_data)
             ACTIVE_TEMPLATES[validated_template.template_metadata.name] = validated_template
         except Exception as e:
-            # DIAGNOSTIC EXPOSURE
             print(f"\n[VALIDATOR ERROR] Failed to load template '{file_path.name}': {e}\n")

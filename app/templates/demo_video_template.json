@@ -1,0 +1,94 @@
+{
+  "template_metadata": {
+    "name": "Demo Video",
+    "version": "1.0",
+    "author": "Antares Agentic Environments",
+    "description": "Audits product demonstration videos, evaluating both the spoken narrative and the live on-screen interactions for clarity and synchronization."
+  },
+  "system_1_live_socket": {
+    "specialist_role": "Product Demo Critic",
+    "primary_objective": "Watch the screen recording and listen to the audio track. Provide real-time feedback on UI/UX explanations and narrative clarity. Interrupt if the visual actions do not match the spoken explanation.",
+    "interaction_mode": "passive",
+    "input_modality": "screen",
+    "model_parameters": {
+      "temperature": 0.3,
+      "interruption_priority": "medium"
+    },
+    "few_shot_calibration": [
+      {
+        "user_input": "[Audio says 'click the action button' but screen shows clicking a drop-down menu]",
+        "expected_output": {
+          "flaw": "Visual-Audio Mismatch",
+          "status": "Desync",
+          "indicator": "red",
+          "interruption": true,
+          "message": "Your spoken explanation does not match the actions shown on screen."
+        }
+      },
+      {
+        "user_input": "[Silence for fifteen seconds while the mouse cursor moves aimlessly without clicking]",
+        "expected_output": {
+          "flaw": "Dead Air",
+          "status": "Loss of Engagement",
+          "indicator": "orange",
+          "interruption": false,
+          "message": "Prolonged silence during a complex visual sequence."
+        }
+      },
+      {
+        "user_input": "Once we click generate, the data table populates instantly, as seen here.",
+        "expected_output": {
+          "flaw": null,
+          "status": "Synchronized",
+          "indicator": "green",
+          "interruption": false,
+          "message": "Narrative perfectly matches the visual action on screen."
+        }
+      }
+    ],
+    "rag_dictionary_injected": [
+      {
+        "rule": "Visual-Audio Mismatch",
+        "definition": "The spoken explanation directly contradicts or fails to describe the actions happening on the screen.",
+        "ui_trigger": "red"
+      },
+      {
+        "rule": "Dead Air",
+        "definition": "Prolonged silence while complex actions are happening on screen without any guiding explanation.",
+        "ui_trigger": "orange"
+      },
+      {
+        "rule": "Jargon Heavy Explanation",
+        "definition": "Explaining a simple UI interaction using overly complex technical terms.",
+        "ui_trigger": "orange"
+      }
+    ]
+  },
+  "system_2_async_council": [
+    {
+      "specialist_role": "UX/UI Flow Evaluator",
+      "primary_objective": "Analyze the sequence of on-screen actions and the corresponding transcript to determine if the product's core value proposition is clearly demonstrated.",
+      "rag_dictionary_injected": [
+        {
+          "rule": "Feature Clarity",
+          "definition": "The core feature being demonstrated is easy to follow and the visual sequence is logical.",
+          "ui_trigger": "green"
+        },
+        {
+          "rule": "Value Proposition Delivered",
+          "definition": "The final result on screen clearly shows the benefit to the end user.",
+          "ui_trigger": "green"
+        }
+      ]
+    }
+  ],
+  "python_orchestrator_thresholds": {
+    "track_wpm": true,
+    "wpm_upper_limit": 150,
+    "wpm_lower_limit": 100,
+    "wpm_violation_trigger": "orange",
+    "enforce_time_limit_seconds": 300,
+    "requires_video_audit": false,
+    "requires_screen_audit": true
+  }
+}

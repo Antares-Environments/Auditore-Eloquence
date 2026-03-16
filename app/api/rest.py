@@ -1,3 +1,4 @@
+# app/api/rest.py
 from app.core.validators import ACTIVE_TEMPLATES
 
 def setup_rest(app):

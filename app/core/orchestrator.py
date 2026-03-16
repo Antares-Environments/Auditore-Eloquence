@@ -30,6 +30,7 @@ class SessionOrchestrator:
         self.transcript_buffer = ""
         self.last_council_time = 0.0
         self.COUNCIL_COOLDOWN = 15.0 
+        self.visual_buffer = []
 
     async def start_live_stream(self, emit_event, send_json, send_audio):
         self.live_task = asyncio.create_task(self._run_live_loop(emit_event, send_json, send_audio))
@@ -142,14 +143,27 @@ class SessionOrchestrator:
         await self.media_queue.put(("audio", audio_chunk, "audio/pcm;rate=16000"))
 
     async def process_video_frame(self, base64_image: str):
-        if not self.thresholds.requires_video_audit:
+        requires_video = self.thresholds.requires_video_audit
+        requires_screen = getattr(self.thresholds, "requires_screen_audit", False)
+        
+        if not (requires_video or requires_screen):
             return
+            
         if "," in base64_image:
             base64_image = base64_image.split(",")[1]
+            
         import base64
         try:
             image_bytes = base64.b64decode(base64_image)
+            
+            # Queue for System 1 (Live API)
             await self.media_queue.put(("video", image_bytes, "image/jpeg"))
+            
+            # Buffer for System 2 (Async Council) - Keep memory light by storing only the 3 most recent frames
+            if len(self.visual_buffer) >= 3:
+                self.visual_buffer.pop(0)
+            self.visual_buffer.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+            
         except Exception as e:
             print(f"[VISION SYSTEM ERROR] Failed to decode camera metric payload: {e}")
 
@@ -168,7 +182,7 @@ class SessionOrchestrator:
         
         if current_time - self.last_council_time >= self.COUNCIL_COOLDOWN:
             if emit_event:
-                await emit_event("Routing accumulated transcript buffer to Background Council...")
+                await emit_event("Routing accumulated transcript buffer and visual context to Background Council...")
             
             # Persist transcript lightly without a database
             try:
@@ -177,7 +191,14 @@ class SessionOrchestrator:
             except Exception as e:
                 pass
             
-            council_evaluations = await self.background_council.evaluate_transcript(self.transcript_buffer)
+            # Extract and clear the visual buffer for the current council run
+            current_visual_context = list(self.visual_buffer)
+            self.visual_buffer.clear()
+            
+            council_evaluations = await self.background_council.evaluate_transcript(
+                self.transcript_buffer, 
+                visual_context=current_visual_context
+            )
             
             self.transcript_buffer = "" 
             self.last_council_time = current_time

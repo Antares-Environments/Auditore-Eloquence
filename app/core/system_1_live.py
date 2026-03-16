@@ -17,14 +17,28 @@ class LiveSessionManager:
             base += f"- {item.rule}: {item.definition} (Trigger: {item.ui_trigger})\n"
             
         base += "\nCRITICAL INSTRUCTION: You are listening to a live audio stream. Constantly evaluate the speaker's tone, pacing, and delivery.\n"
-        base += "FAST RESPONSE MODE: Your ONLY action is to speak a calm, authoritative verbal correction the INSTANT you detect a RED (high priority) flaw.\n"
-        base += "STRICT RULES:\n"
-        base += "1. NEVER monologue. Keep corrections under 5 seconds.\n"
-        base += "2. NEVER output 'thought' blocks or internal reasoning. Respond immediately with audio.\n"
-        base += "3. For GREEN, YELLOW, or ORANGE observations: REMAIN COMPLETELY SILENT. Do not speak. Do not respond.\n"
-        base += "4. Only speak when you MUST correct a RED priority violation.\n"
-        base += "5. TRANSCRIPTION RULE: The speaker is speaking ENGLISH. Always transcribe audio input into English text.\n"
-        base += "6. If recieving multiple red errors in a short time, just correct the unique ones and stop. Do not correct repeated errors in the same breath."    
+        
+        interaction_mode = getattr(self.config, "interaction_mode", "passive")
+
+        if interaction_mode == "active":
+            base += "INTERACTIVE CONVERSATION MODE: You are an active participant in this session.\n"
+            base += "STRICT RULES:\n"
+            base += "1. Drive the conversation forward by asking relevant questions and responding to the speaker.\n"
+            base += "2. Incorporate your Role and Objective naturally into the dialogue.\n"
+            base += "3. Keep your responses concise (under 15 seconds) to maintain a realistic back-and-forth pacing.\n"
+            base += "4. NEVER output 'thought' blocks or internal reasoning. Respond immediately with audio.\n"
+            base += "5. TRANSCRIPTION RULE: The speaker is speaking ENGLISH. Always transcribe audio input into English text.\n"
+            base += "6. While conversing, if you detect a RED (high priority) flaw from the dictionary, calmly point it out and correct the speaker.\n"
+        else:
+            base += "FAST RESPONSE MODE: Your ONLY action is to speak a calm, authoritative verbal correction the INSTANT you detect a RED (high priority) flaw.\n"
+            base += "STRICT RULES:\n"
+            base += "1. NEVER monologue. Keep corrections under 5 seconds.\n"
+            base += "2. NEVER output 'thought' blocks or internal reasoning. Respond immediately with audio.\n"
+            base += "3. For GREEN, YELLOW, or ORANGE observations: REMAIN COMPLETELY SILENT. Do not speak. Do not respond.\n"
+            base += "4. Only speak when you MUST correct a RED priority violation.\n"
+            base += "5. TRANSCRIPTION RULE: The speaker is speaking ENGLISH. Always transcribe audio input into English text.\n"
+            base += "6. If recieving multiple red errors in a short time, just correct the unique ones and stop. Do not correct repeated errors in the same breath.\n"    
+        
         return base
 
     def get_session(self):

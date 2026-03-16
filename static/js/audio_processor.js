@@ -26,8 +26,7 @@ export async function startAudioCapture(webSocket, mediaStream) {
             // Drop processing if socket is not ready to avoid local buffering memory leaks
             if (!webSocket || webSocket.readyState !== WebSocket.OPEN) return;
             
-            // The Walkie-Talkie Drop: Instantly kill outbound packets if Charon is talking
-            if (window.isCharonSpeaking) return;
+            // The Walkie-Talkie Drop has been removed to enable full-duplex interruptibility.
             
             const inputData = e.inputBuffer.getChannelData(0);
             const pcmData = convertFloat32ToInt16(inputData);

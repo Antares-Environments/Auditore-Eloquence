@@ -70,7 +70,8 @@ def get():
     template_data = {
         name: {
             "description": tmpl.template_metadata.description,
-            "requires_video_audit": tmpl.python_orchestrator_thresholds.requires_video_audit
+            "requires_video_audit": tmpl.python_orchestrator_thresholds.requires_video_audit,
+            "requires_screen_audit": getattr(tmpl.python_orchestrator_thresholds, "requires_screen_audit", False)
         }
         for name, tmpl in ACTIVE_TEMPLATES.items()
     }

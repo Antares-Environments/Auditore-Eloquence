@@ -75,6 +75,20 @@ document.addEventListener("DOMContentLoaded", () => {
     eventLog.scrollTop = eventLog.scrollHeight; 
   }
 
+  let playbackContext;
+  let nextPlaybackTime = 0;
+  let activeAudioNodes = [];
+
+  window.stopAgentAudio = function() {
+    activeAudioNodes.forEach(source => {
+        try { source.stop(); } catch(e) {}
+    });
+    activeAudioNodes = [];
+    if (playbackContext) {
+        nextPlaybackTime = playbackContext.currentTime;
+    }
+  };
+
   async function startSession() {
     try {
       if (!selectedTemplate) {
@@ -90,24 +104,39 @@ document.addEventListener("DOMContentLoaded", () => {
       eventLog.innerHTML = ""; 
       logEvent(`Initializing protocol: ${selectedTemplate}...`);
 
-      // Hardware Lockdown: Force acoustic suppression on the microphone
-      activeStream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-          } 
-      });
+      const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
+      const requiresScreen = selectedTemplate === "Demo Video" || templateData[selectedTemplate]?.requires_screen_audit || false;
+      
+      let audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+      if (requiresScreen) {
+          logEvent("Screen Modality requested. Awaiting user permission...");
+          const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+          
+          activeStream = new MediaStream([
+              ...screenStream.getVideoTracks(),
+              ...micStream.getAudioTracks()
+          ]);
+
+          screenStream.getVideoTracks()[0].onended = () => {
+              logEvent("Screen share terminated by user.");
+              if (isSessionActive) terminateSessionUI();
+          };
+      } else {
+          activeStream = await navigator.mediaDevices.getUserMedia({ 
+              video: requiresVideo, 
+              audio: audioConstraints 
+          });
+      }
+
       videoFeed.srcObject = activeStream;
       videoFeed.play();
       
-      // Initialize the global walkie-talkie state flag
+      // We no longer lock the mic with isCharonSpeaking, enabling full-duplex barge-in
       window.isCharonSpeaking = false;
-      window.charonSilenceTimeout = null;
       
-      const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
-      logEvent(`Template Config: Video Auditing is ${requiresVideo ? "ENABLED" : "DISABLED"}`);
+      logEvent(`Template Config: Visual Auditing is ${requiresVideo || requiresScreen ? "ENABLED" : "DISABLED"}`);
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/stream?template=${encodeURIComponent(selectedTemplate)}`;
@@ -117,43 +146,59 @@ document.addEventListener("DOMContentLoaded", () => {
         logEvent("Secure socket established with backend engine.");
         
         try {
-          // Initialize Web Audio API processor
           startAudioCapture(socket, activeStream);
 
-          if (requiresVideo) {
+          // Client-Side VAD for Instant Barge-In
+          window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const analyser = window.audioCtx.createAnalyser();
+          const micSource = window.audioCtx.createMediaStreamSource(activeStream);
+          micSource.connect(analyser);
+          analyser.fftSize = 256;
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          window.vadInterval = setInterval(() => {
+              if (activeAudioNodes.length === 0) return; // Only trigger if agent is actively speaking
+              
+              analyser.getByteFrequencyData(dataArray);
+              let sum = 0;
+              for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+              let avg = sum / dataArray.length;
+              
+              if (avg > 35) { // Threshold for user speech detection
+                  logEvent("[BARGE-IN] User speech detected. Halting agent audio.");
+                  window.stopAgentAudio();
+                  if (socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({ "client_event": "barge_in" }));
+                  }
+              }
+          }, 50);
+
+          if (requiresVideo || requiresScreen) {
               const canvas = document.createElement("canvas");
               const ctx = canvas.getContext("2d");
               
               window.videoAuditInterval = setInterval(() => {
                   if (socket.readyState === WebSocket.OPEN && videoFeed.readyState === videoFeed.HAVE_ENOUGH_DATA) {
-                      // Low resolution to respect Gemini token/bandwidth limits
                       canvas.width = 640;
                       canvas.height = 480;
                       ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
-                      
                       const base64Frame = canvas.toDataURL("image/jpeg", 0.7);
                       socket.send(JSON.stringify({ "video_frame": base64Frame }));
                   }
-              }, 2000); // 2-second capture interval
+              }, 2000); 
           }
 
           statusIndicator.className = "green";
           statusIndicator.textContent = `ACTIVE: ${selectedTemplate}`;
         } catch (mediaError) {
-          console.error("Audio Encoding Error:", mediaError);
-          logEvent(`[ERROR] Audio engine failed to start: ${mediaError.message}`);
+          logEvent(`[ERROR] Audio engine failed: ${mediaError.message}`);
           statusIndicator.className = "red";
           statusIndicator.textContent = "AUDIO CODEC REJECTED";
         }
       };
 
-      let playbackContext;
-      let nextPlaybackTime = 0;
-
       socket.onmessage = async (event) => {
         if (event.data instanceof Blob) {
-            logEvent("[AUDIO FRAME RECEIVED] Intercepted binary speech. Playing audio...");
-            
             if (!playbackContext) {
                 playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
             }
@@ -165,7 +210,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const int16Array = new Int16Array(arrayBuffer);
             const float32Array = new Float32Array(int16Array.length);
             
-            // Normalize Int16 to Float32 [-1.0, 1.0]
             for (let i = 0; i < int16Array.length; i++) {
                 float32Array[i] = int16Array[i] / 32768.0;
             }
@@ -177,28 +221,18 @@ document.addEventListener("DOMContentLoaded", () => {
             source.buffer = audioBuffer;
             source.connect(playbackContext.destination);
 
+            source.onended = () => {
+                const idx = activeAudioNodes.indexOf(source);
+                if (idx > -1) activeAudioNodes.splice(idx, 1);
+            };
+            activeAudioNodes.push(source);
+
             const currentTime = playbackContext.currentTime;
             if (nextPlaybackTime < currentTime) {
-                // If we've fallen behind, start playback slightly in the future
                 nextPlaybackTime = currentTime + 0.01;
             }
             
             source.start(nextPlaybackTime);
-            
-            // The Software Kill Switch: Flag that Charon is currently speaking
-            window.isCharonSpeaking = true;
-            if (window.charonSilenceTimeout) {
-                clearTimeout(window.charonSilenceTimeout);
-            }
-            
-            // Calculate exactly when this specific chunk of audio finishes playing
-            const timeUntilSilence = (nextPlaybackTime - currentTime + audioBuffer.duration) * 1000;
-            
-            // Re-open the microphone exactly 100ms after Charon goes completely silent
-            window.charonSilenceTimeout = setTimeout(() => {
-                window.isCharonSpeaking = false;
-            }, timeUntilSilence + 100);
-
             nextPlaybackTime += audioBuffer.duration;
             return;
         }
@@ -206,34 +240,35 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = JSON.parse(event.data);
         
         if (data.system_event) {
+          if (data.system_event === "interrupted" || data.system_event === "flush") {
+              window.stopAgentAudio();
+              return;
+          }
+          // Simplify logs for Neat Transparency
           logEvent(`[SYSTEM] ${data.system_event}`);
           return;
         }
 
         if (data.indicator && !data.async_results) {
-          logEvent(`[EVALUATION] ${data.message}`);
+          logEvent(`[SYSTEM 1: LIVE] ${data.message}`);
           statusIndicator.className = data.indicator;
           statusIndicator.textContent = data.message;
         }
         
         if (data.async_results) {
-          // 1. Render Pacing
           if (data.async_results.pacing) {
             const pace = data.async_results.pacing;
-            // Only log if it's a violation, but ALWAYS update the visual indicator
             if (pace.indicator !== "green" && pace.indicator !== "white") {
-              logEvent(`[WARNING] Pacing anomaly detected: ${pace.message}`);
+              logEvent(`[PACING METRICS] ${pace.message}`);
             }
             statusIndicator.className = pace.indicator;
             statusIndicator.textContent = pace.message;
           }
           
-          // 2. Render Council Output (Every 15s)
           if (data.async_results.council && Array.isArray(data.async_results.council)) {
             data.async_results.council.forEach(evalResult => {
                 if (evalResult && evalResult.message) {
-                    logEvent(`[COUNCIL] ${evalResult.message}`);
-                    // Only let the council hijack the color panel if it's not green
+                    logEvent(`[SYSTEM 2: COUNCIL] ${evalResult.message}`);
                     if (evalResult.indicator !== "green") {
                         statusIndicator.className = evalResult.indicator;
                         statusIndicator.textContent = evalResult.message;
@@ -245,7 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       socket.onclose = (e) => {
-        logEvent(`Socket disconnected. Code: ${e.code}, Reason: ${e.reason || "Unknown"}`);
+        logEvent(`Socket disconnected.`);
         if(e.code !== 1000 && e.code !== 1001) {
              statusIndicator.className = "red";
              statusIndicator.textContent = "CONNECTION LOST";
@@ -254,7 +289,6 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       socket.onerror = (error) => {
-        console.error("WebSocket Error:", error);
         logEvent("CRITICAL ERROR: Connection to backend failed.");
         statusIndicator.className = "red";
         statusIndicator.textContent = "ENGINE FAULT";
@@ -262,7 +296,6 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
     } catch (error) {
-      console.error("[FRONTEND ENGINE ERROR]:", error);
       statusIndicator.className = "red";
       statusIndicator.textContent = "SYSTEM FAULT (SEE CONSOLE)";
       logEvent("CRITICAL ERROR: Media access denied or system crash.");
@@ -279,7 +312,16 @@ document.addEventListener("DOMContentLoaded", () => {
     activeSessionPanel.style.display = "none";
 
     stopAudioCapture();
+    window.stopAgentAudio();
     
+    if (window.vadInterval) {
+        clearInterval(window.vadInterval);
+        window.vadInterval = null;
+    }
+    if (window.audioCtx) {
+        window.audioCtx.close();
+        window.audioCtx = null;
+    }
     if (window.videoAuditInterval) {
         clearInterval(window.videoAuditInterval);
         window.videoAuditInterval = null;

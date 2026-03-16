@@ -1,0 +1,74 @@
+{
+    "template_metadata": {
+      "name": "Dynamic Interview",
+      "version": "1.0",
+      "author": "Antares Agentic Environments",
+      "description": "Simulates a rigorous, interactive interview. The agent actively asks questions, maintains dialogue, and evaluates responses in real-time."
+    },
+    "system_1_live_socket": {
+      "specialist_role": "Lead Technical and Behavioral Interviewer",
+      "primary_objective": "Conduct a professional interview. Actively ask probing questions, evaluate the candidate's answers, and maintain a natural conversational pacing. If a critical red flag is detected, address it immediately.",
+      "interaction_mode": "active",
+      "input_modality": "video",
+      "model_parameters": {
+        "temperature": 0.7,
+        "interruption_priority": "high"
+      },
+      "few_shot_calibration": [
+        {
+          "user_input": "I don't really know how that works, to be honest.",
+          "expected_output": {
+            "flaw": "Knowledge Gap",
+            "status": "Weak Response",
+            "indicator": "red",
+            "interruption": true,
+            "message": "Candidate demonstrated a critical knowledge gap."
+          }
+        },
+        {
+          "user_input": "I led the team by establishing a clear CI/CD pipeline which reduced deployment times by thirty percent.",
+          "expected_output": {
+            "flaw": null,
+            "status": "Strong Metric",
+            "indicator": "green",
+            "interruption": false,
+            "message": "Excellent use of quantitative metrics."
+          }
+        }
+      ],
+      "rag_dictionary_injected": [
+        {
+          "rule": "Evasion",
+          "definition": "The candidate avoids answering the direct question or pivots to an unrelated topic.",
+          "ui_trigger": "orange"
+        },
+        {
+          "rule": "Contradiction",
+          "definition": "The candidate contradicts a fact or metric they stated earlier in the interview.",
+          "ui_trigger": "red"
+        }
+      ]
+    },
+    "system_2_async_council": [
+      {
+        "specialist_role": "Behavioral Analyst",
+        "primary_objective": "Analyze the visual cues and transcript chunks to assess the candidate's confidence, structural coherence, and professional presence.",
+        "rag_dictionary_injected": [
+          {
+            "rule": "STAR Method Adherence",
+            "definition": "Candidate structures answers using Situation, Task, Action, and Result.",
+            "ui_trigger": "green"
+          }
+        ]
+      }
+    ],
+    "python_orchestrator_thresholds": {
+      "track_wpm": true,
+      "wpm_upper_limit": 160,
+      "wpm_lower_limit": 110,
+      "wpm_violation_trigger": "orange",
+      "enforce_time_limit_seconds": 600,
+      "requires_video_audit": true,
+      "requires_screen_audit": false
+    }
+  }

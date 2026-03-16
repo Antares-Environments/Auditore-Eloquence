@@ -40,11 +40,17 @@ class ThresholdMonitor:
         return (words_spoken_in_window / elapsed_seconds_in_window) * 60.0
 
     def evaluate_thresholds(self) -> Dict[str, str]:
+        elapsed_seconds = time.time() - self.start_time
+        
+        # Enforce Time Limit if configured by the archetype
+        time_limit = self.thresholds.get("enforce_time_limit_seconds", 0)
+        if time_limit > 0 and elapsed_seconds > time_limit:
+            return {"indicator": "red", "message": "TIME LIMIT EXCEEDED"}
+
         if not self.thresholds.get("track_wpm", False):
             # Silent compliance if the template disables tracking
             return {"indicator": "white", "message": "WPM UNTRACKED"}
 
-        elapsed_seconds = time.time() - self.start_time
         current_wpm = self.calculate_wpm()
         
         # 5-second stabilization buffer to prevent instant mathematical spikes
@@ -53,7 +59,7 @@ class ThresholdMonitor:
 
         upper = self.thresholds.get("wpm_upper_limit", 160)
         lower = self.thresholds.get("wpm_lower_limit", 110)
-        trigger = self.thresholds.get("wpm_violation_trigger", "yellow")
+        trigger = self.thresholds.get("wpm_violation_trigger", "orange")
 
         if current_wpm > upper:
             return {"indicator": trigger, "message": f"WPM VIOLATION: {int(current_wpm)} (TOO FAST)"}

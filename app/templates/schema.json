@@ -1,30 +1,155 @@
 {
-    "type": "object",
-    "properties": {
-      "template_metadata": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
+  "type": "object",
+  "properties": {
+    "template_metadata": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "author",
+        "description"
+      ]
+    },
+    "system_1_live_socket": {
+      "type": "object",
+      "properties": {
+        "specialist_role": {
+          "type": "string"
+        },
+        "primary_objective": {
+          "type": "string"
+        },
+        "interaction_mode": {
+          "type": "string",
+          "enum": ["active", "passive"]
+        },
+        "input_modality": {
+          "type": "string",
+          "enum": ["audio", "video", "screen"]
+        },
+        "model_parameters": {
+          "type": "object",
+          "properties": {
+            "temperature": {
+              "type": "number"
+            },
+            "interruption_priority": {
+              "type": "string"
+            }
           },
-          "version": {
-            "type": "string"
-          },
-          "author": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
+          "required": [
+            "temperature",
+            "interruption_priority"
+          ]
+        },
+        "few_shot_calibration": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "user_input": {
+                "type": "string"
+              },
+              "expected_output": {
+                "type": "object",
+                "properties": {
+                  "flaw": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "indicator": {
+                    "type": "string",
+                    "enum": [
+                      "green",
+                      "orange",
+                      "red",
+                      "white",
+                      "gray"
+                    ]
+                  },
+                  "interruption": {
+                    "type": "boolean"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "indicator",
+                  "interruption",
+                  "message"
+                ]
+              }
+            },
+            "required": [
+              "user_input",
+              "expected_output"
+            ]
           }
         },
-        "required": [
-          "name",
-          "version",
-          "author",
-          "description"
-        ]
+        "rag_dictionary_injected": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string"
+              },
+              "definition": {
+                "type": "string"
+              },
+              "ui_trigger": {
+                "type": "string",
+                "enum": [
+                  "green",
+                  "orange",
+                  "red",
+                  "white",
+                  "gray"
+                ]
+              }
+            },
+            "required": [
+              "rule",
+              "definition",
+              "ui_trigger"
+            ]
+          }
+        }
       },
-      "system_1_live_socket": {
+      "required": [
+        "specialist_role",
+        "primary_objective",
+        "model_parameters",
+        "few_shot_calibration",
+        "rag_dictionary_injected"
+      ]
+    },
+    "system_2_async_council": {
+      "type": "array",
+      "items": {
         "type": "object",
         "properties": {
           "specialist_role": {
@@ -32,74 +157,6 @@
           },
           "primary_objective": {
             "type": "string"
-          },
-          "model_parameters": {
-            "type": "object",
-            "properties": {
-              "temperature": {
-                "type": "number"
-              },
-              "interruption_priority": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "temperature",
-              "interruption_priority"
-            ]
-          },
-          "few_shot_calibration": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "user_input": {
-                  "type": "string"
-                },
-                "expected_output": {
-                  "type": "object",
-                  "properties": {
-                    "flaw": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "status": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "indicator": {
-                      "type": "string",
-                      "enum": [
-                        "green",
-                        "yellow",
-                        "pink",
-                        "white",
-                        "gray"
-                      ]
-                    },
-                    "interruption": {
-                      "type": "boolean"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "indicator",
-                    "interruption",
-                    "message"
-                  ]
-                }
-              },
-              "required": [
-                "user_input",
-                "expected_output"
-              ]
-            }
           },
           "rag_dictionary_injected": {
             "type": "array",
@@ -116,8 +173,8 @@
                   "type": "string",
                   "enum": [
                     "green",
-                    "yellow",
-                    "pink",
+                    "orange",
+                    "red",
                     "white",
                     "gray"
                   ]
@@ -134,102 +191,56 @@
         "required": [
           "specialist_role",
           "primary_objective",
-          "model_parameters",
-          "few_shot_calibration",
           "rag_dictionary_injected"
-        ]
-      },
-      "system_2_async_council": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "specialist_role": {
-              "type": "string"
-            },
-            "primary_objective": {
-              "type": "string"
-            },
-            "rag_dictionary_injected": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "rule": {
-                    "type": "string"
-                  },
-                  "definition": {
-                    "type": "string"
-                  },
-                  "ui_trigger": {
-                    "type": "string",
-                    "enum": [
-                      "green",
-                      "yellow",
-                      "pink",
-                      "white",
-                      "gray"
-                    ]
-                  }
-                },
-                "required": [
-                  "rule",
-                  "definition",
-                  "ui_trigger"
-                ]
-              }
-            }
-          },
-          "required": [
-            "specialist_role",
-            "primary_objective",
-            "rag_dictionary_injected"
-          ]
-        }
-      },
-      "python_orchestrator_thresholds": {
-        "type": "object",
-        "properties": {
-          "track_wpm": {
-            "type": "boolean"
-          },
-          "wpm_upper_limit": {
-            "type": "integer"
-          },
-          "wpm_lower_limit": {
-            "type": "integer"
-          },
-          "wpm_violation_trigger": {
-            "type": "string",
-            "enum": [
-              "green",
-              "yellow",
-              "pink",
-              "white",
-              "gray"
-            ]
-          },
-          "enforce_time_limit_seconds": {
-            "type": "integer"
-          },
-          "requires_video_audit": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "track_wpm",
-          "wpm_upper_limit",
-          "wpm_lower_limit",
-          "wpm_violation_trigger",
-          "enforce_time_limit_seconds",
-          "requires_video_audit"
         ]
       }
     },
-    "required": [
-      "template_metadata",
-      "system_1_live_socket",
-      "system_2_async_council",
-      "python_orchestrator_thresholds"
-    ]
-  }
+    "python_orchestrator_thresholds": {
+      "type": "object",
+      "properties": {
+        "track_wpm": {
+          "type": "boolean"
+        },
+        "wpm_upper_limit": {
+          "type": "integer"
+        },
+        "wpm_lower_limit": {
+          "type": "integer"
+        },
+        "wpm_violation_trigger": {
+          "type": "string",
+          "enum": [
+            "green",
+            "orange",
+            "red",
+            "white",
+            "gray"
+          ]
+        },
+        "enforce_time_limit_seconds": {
+          "type": "integer"
+        },
+        "requires_video_audit": {
+          "type": "boolean"
+        },
+        "requires_screen_audit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "track_wpm",
+        "wpm_upper_limit",
+        "wpm_lower_limit",
+        "wpm_violation_trigger",
+        "enforce_time_limit_seconds",
+        "requires_video_audit"
+      ]
+    }
+  },
+  "required": [
+    "template_metadata",
+    "system_1_live_socket",
+    "system_2_async_council",
+    "python_orchestrator_thresholds"
+  ]
+}

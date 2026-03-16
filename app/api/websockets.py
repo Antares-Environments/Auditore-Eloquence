@@ -75,6 +75,10 @@ async def stream_handler(ws):
                     parsed_payload = json.loads(message["text"])
                     if "video_frame" in parsed_payload:
                         await orchestrator.process_video_frame(parsed_payload["video_frame"])
+                    elif "client_event" in parsed_payload and parsed_payload["client_event"] == "barge_in":
+                        print("\n[BARGE-IN] User interrupted the agent.", flush=True)
+                        # The Gemini Live API handles audio interruption natively.
+                        # We acknowledge the frontend signal and log it for diagnostics.
                     else:
                         asyncio.create_task(process_text_task(message["text"]))
                 except json.JSONDecodeError:
