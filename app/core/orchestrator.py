@@ -1,3 +1,4 @@
+# app/core/orchestrator.py
 import asyncio
 import time
 from typing import Optional, Dict, Any
@@ -58,8 +59,10 @@ class SessionOrchestrator:
                         media_type, blob_data, mime = item
                         try:
                             blob = types.Blob(data=blob_data, mime_type=mime)
-                            # Backend Logic Update: Ensuring agent multimodal input is correctly routed via the generic slot
-                            await session.send_realtime_input(audio=blob)
+                            if media_type == "audio":
+                                await session.send_realtime_input(audio=blob)
+                            elif media_type == "video":
+                                await session.send_realtime_input(video=blob)
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
                             raise e
