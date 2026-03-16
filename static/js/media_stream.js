@@ -150,11 +150,22 @@ document.addEventListener("DOMContentLoaded", () => {
       
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
-      // Inject Auto-Recorder for Demo Video
+      window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Inject Unified Auto-Recorder for Demo Video
       if (selectedTemplate === "Demo Video") {
           recordedChunks = [];
           try {
-              mediaRecorder = new MediaRecorder(activeStream, { mimeType: 'video/webm; codecs=vp9' });
+              window.recordingDestination = window.audioCtx.createMediaStreamDestination();
+              const micSource = window.audioCtx.createMediaStreamSource(activeStream);
+              micSource.connect(window.recordingDestination);
+
+              const combinedStream = new MediaStream([
+                  ...activeStream.getVideoTracks(),
+                  ...window.recordingDestination.stream.getAudioTracks()
+              ]);
+
+              mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9' });
               mediaRecorder.ondataavailable = function(e) {
                   if (e.data.size > 0) {
                       recordedChunks.push(e.data);
@@ -175,7 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   }, 100);
               };
               mediaRecorder.start();
-              logEvent("Auto-Recording Active: Session will download upon termination.");
+              logEvent("Auto-Recording Active Matrix: Capturing system and agent audio.");
           } catch (err) {
               logEvent("Warning: MediaRecorder initialization failed.");
           }
@@ -191,7 +202,6 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           startAudioCapture(socket, activeStream);
 
-          window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const analyser = window.audioCtx.createAnalyser();
           const micSource = window.audioCtx.createMediaStreamSource(activeStream);
           micSource.connect(analyser);
@@ -207,7 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
               for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
               let avg = sum / dataArray.length;
               
-              if (avg > 38) { 
+              if (avg > 38 && selectedTemplate !== "Demo Video") { 
                   logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
                   window.lastAgentSpeechTime = Date.now(); // Reset barrier
@@ -264,6 +274,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const source = playbackContext.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(playbackContext.destination);
+
+            if (window.recordingDestination) {
+                source.connect(window.recordingDestination);
+            }
 
             source.onended = () => {
                 const idx = activeAudioNodes.indexOf(source);
@@ -378,6 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
         logEvent("Recording finalized and downloading.");
     }
     mediaRecorder = null;
+    window.recordingDestination = null;
     
     if (window.vadInterval) {
         clearInterval(window.vadInterval);
