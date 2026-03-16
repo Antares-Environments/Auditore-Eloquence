@@ -90,9 +90,21 @@ document.addEventListener("DOMContentLoaded", () => {
       eventLog.innerHTML = ""; 
       logEvent(`Initializing protocol: ${selectedTemplate}...`);
 
-      activeStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Hardware Lockdown: Force acoustic suppression on the microphone
+      activeStream = await navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+          } 
+      });
       videoFeed.srcObject = activeStream;
       videoFeed.play();
+      
+      // Initialize the global walkie-talkie state flag
+      window.isCharonSpeaking = false;
+      window.charonSilenceTimeout = null;
       
       const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
       logEvent(`Template Config: Video Auditing is ${requiresVideo ? "ENABLED" : "DISABLED"}`);
@@ -172,6 +184,21 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             
             source.start(nextPlaybackTime);
+            
+            // The Software Kill Switch: Flag that Charon is currently speaking
+            window.isCharonSpeaking = true;
+            if (window.charonSilenceTimeout) {
+                clearTimeout(window.charonSilenceTimeout);
+            }
+            
+            // Calculate exactly when this specific chunk of audio finishes playing
+            const timeUntilSilence = (nextPlaybackTime - currentTime + audioBuffer.duration) * 1000;
+            
+            // Re-open the microphone exactly 100ms after Charon goes completely silent
+            window.charonSilenceTimeout = setTimeout(() => {
+                window.isCharonSpeaking = false;
+            }, timeUntilSilence + 100);
+
             nextPlaybackTime += audioBuffer.duration;
             return;
         }

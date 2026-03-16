@@ -8,7 +8,7 @@ class BackgroundCouncil:
     def __init__(self, council_config):
         self.council_config = council_config
         self.client = genai.Client()
-        self.model = "gemini-2.5-flash"
+        self.model = "gemini-3.1-flash-lite-preview"
 
     def _build_instruction(self, member):
         base = f"Role: {member.specialist_role}\nObjective: {member.primary_objective}\n"
