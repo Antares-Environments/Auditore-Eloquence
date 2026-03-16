@@ -3,24 +3,37 @@ let audioContext;
 let processor;
 let workletUrl;
 
-// Inline the AudioWorklet logic to ensure background processing for the Prototype
+// Inline the AudioWorklet logic with a 2048-frame chunking buffer
 const workletCode = `
 class PCMProcessor extends AudioWorkletProcessor {
+    constructor() {
+        super();
+        this.buffer = new Float32Array(2048);
+        this.offset = 0;
+    }
     process(inputs, outputs, parameters) {
         const input = inputs[0];
         if (!input || !input[0]) return true;
         
-        const float32Array = input[0];
-        const int16Array = new Int16Array(float32Array.length);
-        
-        for (let i = 0; i < float32Array.length; i++) {
-            let s = Math.max(-1, Math.min(1, float32Array[i]));
+        const channelData = input[0];
+        for (let i = 0; i < channelData.length; i++) {
+            this.buffer[this.offset++] = channelData[i];
+            
+            // Only flush to the main thread when the 2048 buffer is full
+            if (this.offset >= 2048) {
+                this.flush();
+                this.offset = 0;
+            }
+        }
+        return true;
+    }
+    flush() {
+        const int16Array = new Int16Array(2048);
+        for (let i = 0; i < 2048; i++) {
+            let s = Math.max(-1, Math.min(1, this.buffer[i]));
             int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
-        
-        // Transfer the PCM buffer directly back to the main thread
         this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
-        return true;
     }
 }
 registerProcessor('pcm-processor', PCMProcessor);
@@ -49,7 +62,6 @@ export async function startAudioCapture(webSocket, mediaStream) {
         
         processor.port.onmessage = (e) => {
             if (!webSocket || webSocket.readyState !== WebSocket.OPEN) return;
-            
             try {
                 webSocket.send(e.data);
             } catch (wsError) {
