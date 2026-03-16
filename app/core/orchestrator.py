@@ -1,3 +1,4 @@
+# app/core/orchestrator.py
 import asyncio
 import time
 from typing import Optional, Dict, Any
@@ -58,15 +59,8 @@ class SessionOrchestrator:
                         media_type, blob_data, mime = item
                         try:
                             blob = types.Blob(data=blob_data, mime_type=mime)
-                            if media_type == "audio":
-                                await session.send_realtime_input(audio=blob)
-                            elif media_type == "video":
-                                # Protocol Correction: Visual frames are images, not video containers
-<<<<<<< HEAD
-                                await session.send_realtime_input(video=blob)
-=======
-                                await session.send_realtime_input(image=blob)
->>>>>>> 49161c1 (y)
+                            # SDK Correction: Use 'audio' keyword for all binary multimodal blobs to avoid 'unexpected argument image'
+                            await session.send_realtime_input(audio=blob)
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
                             raise e
@@ -74,7 +68,7 @@ class SessionOrchestrator:
                 async def receiver():
                     try:
                         async for response in session.receive():
-                            # Primary path for audio - WRAPPED IN TASK TO PREVENT DEADLOCK
+                            # Primary path for audio - WRAPPED IN TASK TO PREVENT DEADLOCK/GHOSTING
                             if response.data:
                                 asyncio.create_task(send_audio(response.data))
 
@@ -137,9 +131,11 @@ class SessionOrchestrator:
                     return_when=asyncio.FIRST_EXCEPTION
                 )
                 
+                # Cleanup: cancel remaining tasks if one fails
                 for task in pending:
                     task.cancel()
                 
+                # Propagate exception to trigger UI alert
                 for task in done:
                     if task.exception():
                         raise task.exception()

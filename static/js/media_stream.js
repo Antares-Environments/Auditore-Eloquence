@@ -150,34 +150,21 @@ document.addEventListener("DOMContentLoaded", () => {
       
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
-<<<<<<< HEAD
+      // Auto-Play Fix: Resume and initialize hardware on button click
       window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      await window.audioCtx.resume();
+      await playbackContext.resume();
 
       // Inject Unified Auto-Recorder for Demo Video
       if (selectedTemplate === "Demo Video") {
           recordedChunks = [];
           try {
+              // Matrix Mixer: Mix Mic and Agent Voice for the recording stream
               window.recordingDestination = window.audioCtx.createMediaStreamDestination();
               const micSource = window.audioCtx.createMediaStreamSource(activeStream);
               micSource.connect(window.recordingDestination);
 
-=======
-      // Initialize Unified Audio Context for Mixing
-      window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-      // Inject Unified Auto-Recorder with Mixed Audio for Demo Video
-      if (selectedTemplate === "Demo Video") {
-          recordedChunks = [];
-          try {
-              // Create virtual destination for the matrix mixer
-              window.recordingDestination = window.audioCtx.createMediaStreamDestination();
-              
-              // 1. Connect local mic to the mixer
-              const micSource = window.audioCtx.createMediaStreamSource(activeStream);
-              micSource.connect(window.recordingDestination);
-
-              // 2. Combine Screen/Camera with Mixed Audio
->>>>>>> 49161c1 (y)
               const combinedStream = new MediaStream([
                   ...activeStream.getVideoTracks(),
                   ...window.recordingDestination.stream.getAudioTracks()
@@ -204,11 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   }, 100);
               };
               mediaRecorder.start();
-<<<<<<< HEAD
-              logEvent("Auto-Recording Active Matrix: Capturing system and agent audio.");
-=======
-              logEvent("Auto-Recording Active: Combined audio matrix engaged.");
->>>>>>> 49161c1 (y)
+              logEvent("Auto-Recording Active Matrix: Combined system/agent audio link established.");
           } catch (err) {
               logEvent("Warning: MediaRecorder initialization failed.");
           }
@@ -275,13 +258,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       socket.onmessage = async (event) => {
         if (event.data instanceof Blob) {
-            if (!playbackContext) {
-                playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            }
-            if (playbackContext.state === 'suspended') {
-                await playbackContext.resume();
-            }
-
             const arrayBuffer = await event.data.arrayBuffer();
             const int16Array = new Int16Array(arrayBuffer);
             const float32Array = new Float32Array(int16Array.length);
@@ -295,12 +271,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const source = playbackContext.createBufferSource();
             source.buffer = audioBuffer;
+            
+            // Route to speakers AND recording mixer
             source.connect(playbackContext.destination);
-
-<<<<<<< HEAD
-=======
-            // Connect agent voice to the recording destination if auditing
->>>>>>> 49161c1 (y)
             if (window.recordingDestination) {
                 source.connect(window.recordingDestination);
             }
