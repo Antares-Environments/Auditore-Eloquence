@@ -62,7 +62,11 @@ class SessionOrchestrator:
                                 await session.send_realtime_input(audio=blob)
                             elif media_type == "video":
                                 # Protocol Correction: Visual frames are images, not video containers
+<<<<<<< HEAD
                                 await session.send_realtime_input(video=blob)
+=======
+                                await session.send_realtime_input(image=blob)
+>>>>>>> 49161c1 (y)
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
                             raise e

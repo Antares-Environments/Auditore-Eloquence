@@ -150,6 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
+<<<<<<< HEAD
       window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
       // Inject Unified Auto-Recorder for Demo Video
@@ -160,6 +161,23 @@ document.addEventListener("DOMContentLoaded", () => {
               const micSource = window.audioCtx.createMediaStreamSource(activeStream);
               micSource.connect(window.recordingDestination);
 
+=======
+      // Initialize Unified Audio Context for Mixing
+      window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Inject Unified Auto-Recorder with Mixed Audio for Demo Video
+      if (selectedTemplate === "Demo Video") {
+          recordedChunks = [];
+          try {
+              // Create virtual destination for the matrix mixer
+              window.recordingDestination = window.audioCtx.createMediaStreamDestination();
+              
+              // 1. Connect local mic to the mixer
+              const micSource = window.audioCtx.createMediaStreamSource(activeStream);
+              micSource.connect(window.recordingDestination);
+
+              // 2. Combine Screen/Camera with Mixed Audio
+>>>>>>> 49161c1 (y)
               const combinedStream = new MediaStream([
                   ...activeStream.getVideoTracks(),
                   ...window.recordingDestination.stream.getAudioTracks()
@@ -186,7 +204,11 @@ document.addEventListener("DOMContentLoaded", () => {
                   }, 100);
               };
               mediaRecorder.start();
+<<<<<<< HEAD
               logEvent("Auto-Recording Active Matrix: Capturing system and agent audio.");
+=======
+              logEvent("Auto-Recording Active: Combined audio matrix engaged.");
+>>>>>>> 49161c1 (y)
           } catch (err) {
               logEvent("Warning: MediaRecorder initialization failed.");
           }
@@ -275,6 +297,10 @@ document.addEventListener("DOMContentLoaded", () => {
             source.buffer = audioBuffer;
             source.connect(playbackContext.destination);
 
+<<<<<<< HEAD
+=======
+            // Connect agent voice to the recording destination if auditing
+>>>>>>> 49161c1 (y)
             if (window.recordingDestination) {
                 source.connect(window.recordingDestination);
             }
