@@ -19,55 +19,33 @@ document.addEventListener("DOMContentLoaded", () => {
   let templateData = window.TEMPLATE_DATA || {};
   let isSessionActive = false;
 
-  // Auto-Recorder Variables
   let mediaRecorder = null;
   let recordedChunks = [];
 
-  // Globally expose hover interaction functions for SVG inline handlers
   window.hoverRingItem = function(selectedId, categoryLabel) {
     const slice = document.getElementById('slice-' + selectedId);
-    if (slice) {
-        slice.classList.add("hover");
-    }
-    const centerNode = document.getElementById("donut-center-text");
-    if (centerNode) {
-        centerNode.textContent = categoryLabel;
-    }
+    if (slice) slice.classList.add("hover");
+    if (centerText) centerText.textContent = categoryLabel;
   };
 
   window.resetRingItem = function(selectedId) {
     const slice = document.getElementById('slice-' + selectedId);
-    if (slice) {
-        slice.classList.remove("hover");
-    }
-    const centerNode = document.getElementById("donut-center-text");
-    if (centerNode) {
-        centerNode.textContent = selectedTemplate ? selectedTemplate : "SELECT ARCHETYPE";
-    }
+    if (slice) slice.classList.remove("hover");
+    if (centerText) centerText.textContent = selectedTemplate ? selectedTemplate : "SELECT ARCHETYPE";
   };
 
   window.clickRingItem = function(selectedId, categoryLabel) {
-    document.querySelectorAll(".donut-slice").forEach(p => {
-        p.classList.remove("selected", "hover");
-    });
-    
+    document.querySelectorAll(".donut-slice").forEach(p => p.classList.remove("selected", "hover"));
     const activeSlice = document.getElementById('slice-' + selectedId);
-    if (activeSlice) {
-        activeSlice.classList.add("selected");
-    }
-    
+    if (activeSlice) activeSlice.classList.add("selected");
     selectedTemplate = categoryLabel;
-    
-    const centerNode = document.getElementById("donut-center-text");
-    if (centerNode) {
-        centerNode.textContent = categoryLabel;
-        centerNode.style.borderColor = "var(--element-jade)";
+    if (centerText) {
+        centerText.textContent = categoryLabel;
+        centerText.style.borderColor = "var(--element-jade)";
     }
-    
-    const detailsNode = document.getElementById("template-details");
-    if (detailsNode) {
-        detailsNode.style.display = "block";
-        detailsNode.textContent = templateData[categoryLabel]?.description || "Archetype configuration initialized.";
+    if (templateDetails) {
+        templateDetails.style.display = "block";
+        templateDetails.textContent = templateData[categoryLabel]?.description || "Archetype configuration initialized.";
     }
   };
 
@@ -87,11 +65,10 @@ document.addEventListener("DOMContentLoaded", () => {
   window.isCharonSpeaking = false;
   window.lastAgentSpeechTime = 0; 
   window.charonSpeakingTimeout = null; 
+  window.ignoreAudioUntil = 0;
 
   window.stopAgentAudio = function() {
-    activeAudioNodes.forEach(source => {
-        try { source.stop(); } catch(e) {}
-    });
+    activeAudioNodes.forEach(source => { try { source.stop(); } catch(e) {} });
     activeAudioNodes = [];
     if (window.charonSpeakingTimeout) {
         clearTimeout(window.charonSpeakingTimeout);
@@ -99,9 +76,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.isCharonSpeaking = false;
     window.lastAgentSpeechTime = Date.now(); 
-    if (playbackContext) {
-        nextPlaybackTime = playbackContext.currentTime;
-    }
+    window.ignoreAudioUntil = Date.now() + 1500; 
+    if (playbackContext) nextPlaybackTime = playbackContext.currentTime;
   };
 
   async function startSession() {
@@ -121,44 +97,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
       const requiresScreen = selectedTemplate === "Demo Video" || templateData[selectedTemplate]?.requires_screen_audit || false;
-      
       let audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
       if (requiresScreen) {
           logEvent("Screen Modality requested. Establishing display link...");
           const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
           const micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-          
-          activeStream = new MediaStream([
-              ...screenStream.getVideoTracks(),
-              ...micStream.getAudioTracks()
-          ]);
-
+          activeStream = new MediaStream([...screenStream.getVideoTracks(), ...micStream.getAudioTracks()]);
           screenStream.getVideoTracks()[0].onended = () => {
               logEvent("Display link severed by user.");
               if (isSessionActive) terminateSessionUI();
           };
       } else {
-          activeStream = await navigator.mediaDevices.getUserMedia({ 
-              video: requiresVideo, 
-              audio: audioConstraints 
-          });
+          activeStream = await navigator.mediaDevices.getUserMedia({ video: requiresVideo, audio: audioConstraints });
       }
 
       videoFeed.srcObject = activeStream;
       videoFeed.play();
-      
       logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
-      // Inject Auto-Recorder for Demo Video
       if (selectedTemplate === "Demo Video") {
           recordedChunks = [];
           try {
               mediaRecorder = new MediaRecorder(activeStream, { mimeType: 'video/webm; codecs=vp9' });
               mediaRecorder.ondataavailable = function(e) {
-                  if (e.data.size > 0) {
-                      recordedChunks.push(e.data);
-                  }
+                  if (e.data.size > 0) recordedChunks.push(e.data);
               };
               mediaRecorder.onstop = function() {
                   const blob = new Blob(recordedChunks, { type: 'video/webm' });
@@ -187,7 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       socket.onopen = () => {
         logEvent("Secure matrix link established.");
-        
         try {
           startAudioCapture(socket, activeStream);
 
@@ -199,7 +161,6 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           window.vadInterval = setInterval(() => {
-              // Ironclad 1000ms suppression barrier
               if (window.isCharonSpeaking || (Date.now() - window.lastAgentSpeechTime < 1000)) return; 
 
               analyser.getByteFrequencyData(dataArray);
@@ -207,10 +168,11 @@ document.addEventListener("DOMContentLoaded", () => {
               for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
               let avg = sum / dataArray.length;
               
-              if (avg > 38) { 
+              // Only trigger VAD interruption if we are NOT auditing a Demo Video
+              if (avg > 38 && selectedTemplate !== "Demo Video") { 
                   logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
-                  window.lastAgentSpeechTime = Date.now(); // Reset barrier
+                  window.lastAgentSpeechTime = Date.now(); 
                   if (socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ "client_event": "barge_in" }));
                   }
@@ -220,14 +182,12 @@ document.addEventListener("DOMContentLoaded", () => {
           if (requiresVideo || requiresScreen) {
               const canvas = document.createElement("canvas");
               const ctx = canvas.getContext("2d");
-              
               window.videoAuditInterval = setInterval(() => {
                   if (socket.readyState === WebSocket.OPEN && videoFeed.readyState === videoFeed.HAVE_ENOUGH_DATA) {
                       canvas.width = 640;
                       canvas.height = 480;
                       ctx.drawImage(videoFeed, 0, 0, canvas.width, canvas.height);
-                      const base64Frame = canvas.toDataURL("image/jpeg", 0.7);
-                      socket.send(JSON.stringify({ "video_frame": base64Frame }));
+                      socket.send(JSON.stringify({ "video_frame": canvas.toDataURL("image/jpeg", 0.7) }));
                   }
               }, 2000); 
           }
@@ -243,20 +203,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       socket.onmessage = async (event) => {
         if (event.data instanceof Blob) {
-            if (!playbackContext) {
-                playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            }
-            if (playbackContext.state === 'suspended') {
-                await playbackContext.resume();
-            }
+            if (Date.now() < window.ignoreAudioUntil) return;
+
+            if (!playbackContext) playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+            if (playbackContext.state === 'suspended') await playbackContext.resume();
 
             const arrayBuffer = await event.data.arrayBuffer();
             const int16Array = new Int16Array(arrayBuffer);
             const float32Array = new Float32Array(int16Array.length);
-            
-            for (let i = 0; i < int16Array.length; i++) {
-                float32Array[i] = int16Array[i] / 32768.0;
-            }
+            for (let i = 0; i < int16Array.length; i++) float32Array[i] = int16Array[i] / 32768.0;
 
             const audioBuffer = playbackContext.createBuffer(1, float32Array.length, 24000);
             audioBuffer.getChannelData(0).set(float32Array);
@@ -285,9 +240,7 @@ document.addEventListener("DOMContentLoaded", () => {
             window.isCharonSpeaking = true;
 
             const currentTime = playbackContext.currentTime;
-            if (nextPlaybackTime < currentTime) {
-                nextPlaybackTime = currentTime + 0.01;
-            }
+            if (nextPlaybackTime < currentTime) nextPlaybackTime = currentTime + 0.01;
             
             source.start(nextPlaybackTime);
             nextPlaybackTime += audioBuffer.duration;
@@ -295,7 +248,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const data = JSON.parse(event.data);
-        
         if (data.system_event) {
           if (data.system_event === "interrupted" || data.system_event === "flush") {
               window.stopAgentAudio();
@@ -316,13 +268,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.async_results) {
           if (data.async_results.pacing) {
             const pace = data.async_results.pacing;
-            if (pace.indicator !== "green" && pace.indicator !== "white") {
-              logEvent(`Telemetry Warning: ${pace.message}`);
-            }
+            if (pace.indicator !== "green" && pace.indicator !== "white") logEvent(`Telemetry Warning: ${pace.message}`);
             statusIndicator.className = pace.indicator;
             statusIndicator.textContent = pace.message;
           }
-          
           if (data.async_results.council && Array.isArray(data.async_results.council)) {
             data.async_results.council.forEach(evalResult => {
                 if (evalResult && evalResult.message) {
@@ -345,14 +294,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         terminateSessionUI();
       };
-
       socket.onerror = (error) => {
         logEvent("Engine fault detected. Matrix connection terminated.");
         statusIndicator.className = "red";
         statusIndicator.textContent = "ENGINE FAULT";
         terminateSessionUI();
       };
-
     } catch (error) {
       statusIndicator.className = "red";
       statusIndicator.textContent = "SYSTEM FAULT";
@@ -372,7 +319,6 @@ document.addEventListener("DOMContentLoaded", () => {
     stopAudioCapture();
     window.stopAgentAudio();
 
-    // Finalize recording if active
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
         logEvent("Recording finalized and downloading.");

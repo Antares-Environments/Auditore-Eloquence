@@ -70,14 +70,14 @@ class SessionOrchestrator:
                 async def receiver():
                     try:
                         async for response in session.receive():
-                            # Primary path for audio
+                            # Primary path for audio - WRAPPED IN TASK TO PREVENT DEADLOCK
                             if response.data:
-                                await send_audio(response.data)
+                                asyncio.create_task(send_audio(response.data))
 
                             if response.server_content and response.server_content.model_turn:
                                 for part in response.server_content.model_turn.parts:
                                     if hasattr(part, 'inline_data') and part.inline_data:
-                                        await send_audio(part.inline_data.data)
+                                        asyncio.create_task(send_audio(part.inline_data.data))
                                     
                                     if hasattr(part, 'thought') and part.thought:
                                         print(f"[DIAGNOSTIC] Model Thinking detected: {part.thought[:100]}...", flush=True)
@@ -93,8 +93,8 @@ class SessionOrchestrator:
                                             import json as _json
                                             payload = _json.loads(raw)
                                             if "indicator" in payload:
-                                                await emit_event(f"System 1 evaluation: {payload.get('message', '')}")
-                                                await send_json(payload)
+                                                asyncio.create_task(emit_event(f"System 1 evaluation: {payload.get('message', '')}"))
+                                                asyncio.create_task(send_json(payload))
                                                 continue
                                         except (_json.JSONDecodeError, ValueError):
                                             pass
@@ -133,11 +133,9 @@ class SessionOrchestrator:
                     return_when=asyncio.FIRST_EXCEPTION
                 )
                 
-                # Cleanup: cancel remaining tasks if one fails
                 for task in pending:
                     task.cancel()
                 
-                # Propagate exception to trigger UI alert
                 for task in done:
                     if task.exception():
                         raise task.exception()
