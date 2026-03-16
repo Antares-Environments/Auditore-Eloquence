@@ -1,4 +1,3 @@
-# app/core/orchestrator.py
 import asyncio
 import time
 from typing import Optional, Dict, Any
@@ -59,8 +58,7 @@ class SessionOrchestrator:
                         media_type, blob_data, mime = item
                         try:
                             blob = types.Blob(data=blob_data, mime_type=mime)
-                            # Using 'audio' as the generic binary input slot for all multimodal blobs; 
-                            # the API handles routing internally via the 'mime' parameter.
+                            # Backend Logic Update: Ensuring agent multimodal input is correctly routed via the generic slot
                             await session.send_realtime_input(audio=blob)
                         except Exception as e:
                             print(f"[SENDER ERROR] Failed to send {media_type} chunk: {e}", flush=True)
@@ -109,6 +107,17 @@ class SessionOrchestrator:
                         print(f"[RECEIVER ERROR] {e}", flush=True)
                         raise e
 
+                async def analytics_processor():
+                    while True:
+                        text = await self.transcript_queue.get()
+                        if text is None:
+                            break
+                        try:
+                            result = await self.process_async_transcript(text, emit_event)
+                            await send_json({"async_results": result})
+                        except Exception as e:
+                            print(f"[ANALYTICS ERROR] {e}", flush=True)
+                
                 # Supervisor Pattern implementation
                 tasks = [
                     asyncio.create_task(sender()),
