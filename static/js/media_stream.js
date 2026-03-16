@@ -57,20 +57,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const centerNode = document.getElementById("donut-center-text");
     if (centerNode) {
         centerNode.textContent = categoryLabel;
-        centerNode.style.borderColor = "var(--element-olive)";
+        centerNode.style.borderColor = "var(--element-jade)";
     }
     
     const detailsNode = document.getElementById("template-details");
     if (detailsNode) {
         detailsNode.style.display = "block";
-        detailsNode.textContent = templateData[categoryLabel]?.description || "Template configuration loaded.";
+        detailsNode.textContent = templateData[categoryLabel]?.description || "Archetype configuration initialized.";
     }
   };
 
   function logEvent(message) {
-    const time = new Date().toLocaleTimeString();
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const entry = document.createElement("div");
-    entry.textContent = `[${time}] ${message}`;
+    entry.style.marginBottom = "4px";
+    entry.innerHTML = `<span style="color: var(--element-olive); font-weight: bold;">[${time}]</span> ${message}`;
     eventLog.appendChild(entry);
     eventLog.scrollTop = eventLog.scrollHeight; 
   }
@@ -79,11 +80,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let nextPlaybackTime = 0;
   let activeAudioNodes = [];
 
+  window.isCharonSpeaking = false;
+
   window.stopAgentAudio = function() {
     activeAudioNodes.forEach(source => {
         try { source.stop(); } catch(e) {}
     });
     activeAudioNodes = [];
+    window.isCharonSpeaking = false;
     if (playbackContext) {
         nextPlaybackTime = playbackContext.currentTime;
     }
@@ -93,7 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       if (!selectedTemplate) {
         statusIndicator.className = "orange";
-        statusIndicator.textContent = "SELECT TEMPLATE FIRST";
+        statusIndicator.textContent = "SELECT ARCHETYPE TO BEGIN";
         return;
       }
 
@@ -102,7 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
       idlePanel.style.display = "none";
       activeSessionPanel.style.display = "flex";
       eventLog.innerHTML = ""; 
-      logEvent(`Initializing protocol: ${selectedTemplate}...`);
+      logEvent(`System Alignment: Loading ${selectedTemplate} Protocol...`);
 
       const requiresVideo = templateData[selectedTemplate]?.requires_video_audit || false;
       const requiresScreen = selectedTemplate === "Demo Video" || templateData[selectedTemplate]?.requires_screen_audit || false;
@@ -110,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let audioConstraints = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 
       if (requiresScreen) {
-          logEvent("Screen Modality requested. Awaiting user permission...");
+          logEvent("Screen Modality requested. Establishing display link...");
           const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
           const micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
           
@@ -120,7 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
           ]);
 
           screenStream.getVideoTracks()[0].onended = () => {
-              logEvent("Screen share terminated by user.");
+              logEvent("Display link severed by user.");
               if (isSessionActive) terminateSessionUI();
           };
       } else {
@@ -133,22 +137,18 @@ document.addEventListener("DOMContentLoaded", () => {
       videoFeed.srcObject = activeStream;
       videoFeed.play();
       
-      // We no longer lock the mic with isCharonSpeaking, enabling full-duplex barge-in
-      window.isCharonSpeaking = false;
-      
-      logEvent(`Template Config: Visual Auditing is ${requiresVideo || requiresScreen ? "ENABLED" : "DISABLED"}`);
+      logEvent(`Sensors Engaged: Visual Auditing is ${requiresVideo || requiresScreen ? "ACTIVE" : "OFFLINE"}`);
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/stream?template=${encodeURIComponent(selectedTemplate)}`;
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        logEvent("Secure socket established with backend engine.");
+        logEvent("Secure matrix link established.");
         
         try {
           startAudioCapture(socket, activeStream);
 
-          // Client-Side VAD for Instant Barge-In
           window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const analyser = window.audioCtx.createAnalyser();
           const micSource = window.audioCtx.createMediaStreamSource(activeStream);
@@ -157,15 +157,16 @@ document.addEventListener("DOMContentLoaded", () => {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           window.vadInterval = setInterval(() => {
-              if (activeAudioNodes.length === 0) return; // Only trigger if agent is actively speaking
-              
+              // Echo Suppression: Only evaluate user speech if the agent is silent or input is extremely high
+              if (window.isCharonSpeaking) return; 
+
               analyser.getByteFrequencyData(dataArray);
               let sum = 0;
               for(let i = 0; i < dataArray.length; i++) sum += dataArray[i];
               let avg = sum / dataArray.length;
               
-              if (avg > 35) { // Threshold for user speech detection
-                  logEvent("[BARGE-IN] User speech detected. Halting agent audio.");
+              if (avg > 38) { // Calibrated threshold for user speech
+                  logEvent("Barge-in detected. Recalibrating agent dialogue...");
                   window.stopAgentAudio();
                   if (socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ "client_event": "barge_in" }));
@@ -189,11 +190,11 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           statusIndicator.className = "green";
-          statusIndicator.textContent = `ACTIVE: ${selectedTemplate}`;
+          statusIndicator.textContent = `PROTOCOL ACTIVE: ${selectedTemplate}`;
         } catch (mediaError) {
-          logEvent(`[ERROR] Audio engine failed: ${mediaError.message}`);
+          logEvent(`[FAULT] Sensor array failed: ${mediaError.message}`);
           statusIndicator.className = "red";
-          statusIndicator.textContent = "AUDIO CODEC REJECTED";
+          statusIndicator.textContent = "HARDWARE REJECTED";
         }
       };
 
@@ -224,8 +225,11 @@ document.addEventListener("DOMContentLoaded", () => {
             source.onended = () => {
                 const idx = activeAudioNodes.indexOf(source);
                 if (idx > -1) activeAudioNodes.splice(idx, 1);
+                if (activeAudioNodes.length === 0) window.isCharonSpeaking = false;
             };
+            
             activeAudioNodes.push(source);
+            window.isCharonSpeaking = true;
 
             const currentTime = playbackContext.currentTime;
             if (nextPlaybackTime < currentTime) {
@@ -244,13 +248,15 @@ document.addEventListener("DOMContentLoaded", () => {
               window.stopAgentAudio();
               return;
           }
-          // Simplify logs for Neat Transparency
-          logEvent(`[SYSTEM] ${data.system_event}`);
+          // Human-readable system status
+          if (data.system_event.includes("Mounting")) logEvent("Core Orchestrator Engaged.");
+          else if (data.system_event.includes("initialized")) logEvent("Multi-Agent Council synchronized.");
+          else logEvent(`System Update: ${data.system_event}`);
           return;
         }
 
         if (data.indicator && !data.async_results) {
-          logEvent(`[SYSTEM 1: LIVE] ${data.message}`);
+          logEvent(`Live Evaluation: ${data.message}`);
           statusIndicator.className = data.indicator;
           statusIndicator.textContent = data.message;
         }
@@ -259,7 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (data.async_results.pacing) {
             const pace = data.async_results.pacing;
             if (pace.indicator !== "green" && pace.indicator !== "white") {
-              logEvent(`[PACING METRICS] ${pace.message}`);
+              logEvent(`Telemetry Warning: ${pace.message}`);
             }
             statusIndicator.className = pace.indicator;
             statusIndicator.textContent = pace.message;
@@ -268,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (data.async_results.council && Array.isArray(data.async_results.council)) {
             data.async_results.council.forEach(evalResult => {
                 if (evalResult && evalResult.message) {
-                    logEvent(`[SYSTEM 2: COUNCIL] ${evalResult.message}`);
+                    logEvent(`Council Consensus: ${evalResult.message}`);
                     if (evalResult.indicator !== "green") {
                         statusIndicator.className = evalResult.indicator;
                         statusIndicator.textContent = evalResult.message;
@@ -280,16 +286,16 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       socket.onclose = (e) => {
-        logEvent(`Socket disconnected.`);
+        logEvent(`Matrix link disconnected.`);
         if(e.code !== 1000 && e.code !== 1001) {
              statusIndicator.className = "red";
-             statusIndicator.textContent = "CONNECTION LOST";
+             statusIndicator.textContent = "LINK SEVERED";
         }
         terminateSessionUI();
       };
 
       socket.onerror = (error) => {
-        logEvent("CRITICAL ERROR: Connection to backend failed.");
+        logEvent("Engine fault detected. Matrix connection terminated.");
         statusIndicator.className = "red";
         statusIndicator.textContent = "ENGINE FAULT";
         terminateSessionUI();
@@ -297,8 +303,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     } catch (error) {
       statusIndicator.className = "red";
-      statusIndicator.textContent = "SYSTEM FAULT (SEE CONSOLE)";
-      logEvent("CRITICAL ERROR: Media access denied or system crash.");
+      statusIndicator.textContent = "SYSTEM FAULT";
+      logEvent(`[CRITICAL] Engine Crash: ${error.message}`);
       terminateSessionUI();
     }
   }
@@ -307,7 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
     isSessionActive = false;
     sessionToggle.textContent = "START SESSION";
     statusIndicator.className = "white";
-    statusIndicator.textContent = "SYSTEM IDLE";
+    statusIndicator.textContent = "SYSTEM STANDBY";
     idlePanel.style.display = "flex";
     activeSessionPanel.style.display = "none";
 
@@ -336,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   sessionToggle.addEventListener("click", () => {
     if (isSessionActive) {
-      logEvent("Manual termination initiated...");
+      logEvent("Manual termination sequence initiated...");
       terminateSessionUI();
     } else {
       startSession();

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv() 
 
-from fasthtml.common import fast_app, serve, Link, Script, Div, Button, Video, Titled, FileResponse
+from fasthtml.common import fast_app, serve, Link, Script, Div, Button, Video, Titled, FileResponse, H1, NotStr
 from app.api.websockets import setup_websockets
 from app.core.validators import load_templates, ACTIVE_TEMPLATES
 
@@ -80,15 +80,12 @@ def get():
     categories = list(ACTIVE_TEMPLATES.keys())
     segments = generate_svg_segments(categories)
     
-    from fasthtml.common import NotStr
-    
     # Assemble the SVG string manually since FastHTML SVGs can be convoluted for purely geometric paths
     svg_content = '<svg id="donut-svg" width="300" height="300" viewBox="0 0 300 300">'
     for segment in segments:
         label = segment['label']
         sid = segment['id']
         path = segment['path']
-        # The javascript port will need hoverRingItem(id, label), resetRingItem(id), and clickRingItem(id, label)
         svg_content += f"""
         <path id="slice-{sid}" d="{path}" fill="#3f2a03" class="donut-slice"
             style="cursor: pointer; transition: fill 0.3s ease, transform 0.3s ease; transform-origin: 150px 150px;"
@@ -103,27 +100,32 @@ def get():
     return Titled(
         "Auditore Eloquence",
         Script(f"window.TEMPLATE_DATA = {json.dumps(template_data)};"),
-        Div("SYSTEM IDLE", id="status-indicator", cls="white"),
         
+        # Dashboard Header
+        Div(id="status-indicator", cls="white")("SYSTEM STANDBY"),
+        
+        # Interactive Layout Engine
         Div(
             Div(
-                Div("SELECT TEMPLATE", id="donut-center-text"),
+                Div("SELECT ARCHETYPE", id="donut-center-text"),
                 NotStr(svg_content),
                 id="donut-container"
             ),
-            Div(id="template-details", cls="white", style="display: none; padding: 1rem; margin-bottom: 1rem; width: 100%; max-width: 600px; box-sizing: border-box; text-align: center; border-radius: 4px; font-weight: bold; border: 1px solid var(--indicator-gray);"),
-            id="idle-panel",
-            style="display: flex; flex-direction: column; align-items: center; width: 100%;"
+            Div(id="template-details", cls="white", style="display: none;"),
+            id="idle-panel"
         ),
 
+        # Active Session Modality
         Div(
             Video(id="video-feed", autoplay=True, muted=True),
             id="active-session-panel",
-            style="display: none; flex-direction: column; align-items: center; width: 100%;"
+            style="display: none;"
         ),
         
-        Div(id="live-event-log", style="width: 100%; max-width: 600px; height: 150px; overflow-y: auto; margin-top: 1rem; padding: 1rem; background-color: var(--indicator-white); border: 2px solid var(--indicator-gray); border-radius: 4px; font-family: monospace; font-size: 0.85rem; color: var(--element-brown); box-sizing: border-box; text-align: left;"),
+        # Intelligence Telemetry Log
+        Div(id="live-event-log"),
         
+        # Control Interface
         Div(
             Button("START SESSION", id="session-toggle"),
             cls="button-container"
